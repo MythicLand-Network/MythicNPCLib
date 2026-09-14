@@ -5,12 +5,14 @@
 package cn.mythicland.npclib.internal;
 
 import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import cn.mythicland.npclib.NPCLib;
 import cn.mythicland.npclib.api.NPC;
 import cn.mythicland.npclib.api.events.NPCHideEvent;
 import cn.mythicland.npclib.api.events.NPCShowEvent;
+import cn.mythicland.npclib.api.skin.Skin;
 import cn.mythicland.npclib.api.state.NPCAnimation;
 import cn.mythicland.npclib.api.state.NPCSlot;
 import cn.mythicland.npclib.api.state.NPCState;
@@ -45,6 +47,7 @@ public abstract class NPCBase implements NPC, NPCPacketHandler {
     protected String name = uuid.toString().replace("-", "").substring(0, 10);
     protected GameProfile gameProfile = new GameProfile(uuid, name);
     protected boolean created = false;
+    protected Skin skin;
 
     // protected Hologram hologram;
     protected NPCLib instance;
@@ -129,6 +132,19 @@ public abstract class NPCBase implements NPC, NPCPacketHandler {
     @Override
     public String getId() {
         return name;
+    }
+
+    @Override
+    public NPC setSkin(Skin skin) {
+        this.skin = skin;
+        gameProfile.getProperties().get("textures").clear();
+        if (skin != null) {
+            gameProfile.getProperties().put(
+                    "textures",
+                    new Property("textures", skin.value(), skin.signature())
+            );
+        }
+        return this;
     }
 
     @Override

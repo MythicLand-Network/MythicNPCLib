@@ -5,6 +5,7 @@
 package cn.mythicland.npclib.nms.v1_8_R3;
 
 import cn.mythicland.npclib.NPCLib;
+import cn.mythicland.npclib.api.skin.Skin;
 import cn.mythicland.npclib.api.state.NPCAnimation;
 import cn.mythicland.npclib.api.state.NPCSlot;
 import cn.mythicland.npclib.hologram.Hologram;
@@ -235,6 +236,20 @@ public class NPC_v1_8_R3 extends NPCBase {
             Player player = Bukkit.getPlayer(shownUuid);
             if (player == null || !isShown(player)) continue;
             ((CraftPlayer) player).getHandle().playerConnection.sendPacket(packet);
+        }
+    }
+
+    @Override
+    public void updateSkin(Skin skin) {
+        this.setSkin(skin);
+        this.createPackets();
+        for (UUID shownUuid : getShown()) {
+            Player player = Bukkit.getPlayer(shownUuid);
+            if (player == null || !isShown(player)) continue;
+            sendHidePackets(player, false);
+            sendShowPackets(player);
+            sendMetadataPacket(player);
+            sendEquipmentPackets(player);
         }
     }
 

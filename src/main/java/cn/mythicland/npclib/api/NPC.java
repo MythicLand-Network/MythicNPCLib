@@ -4,6 +4,7 @@
 
 package cn.mythicland.npclib.api;
 
+import cn.mythicland.npclib.api.skin.Skin;
 import cn.mythicland.npclib.api.state.NPCAnimation;
 import cn.mythicland.npclib.api.state.NPCSlot;
 import cn.mythicland.npclib.api.state.NPCState;
@@ -35,6 +36,14 @@ public interface NPC {
      * @return the lines that the player will see, if null; default lines.
      */
     List<String> getText(Player player);
+
+    /**
+     * Set the NPC's skin. Use this method before using {@link NPC#create}.
+     *
+     * @param skin The skin data to apply.
+     * @return object instance.
+     */
+    NPC setSkin(Skin skin);
 
     /**
      * Get the location of the NPC.
@@ -162,6 +171,13 @@ public interface NPC {
      * @return object instance
      */
     NPC setText(List<String> text);
+
+    /**
+     * Update the skin for every player that can see the NPC.
+     *
+     * @param skin The new skin for the NPC.
+     */
+    void updateSkin(Skin skin);
 
     /**
      * Get a NPC's item.
