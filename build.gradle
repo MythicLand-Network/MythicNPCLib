@@ -1,0 +1,146 @@
+plugins {
+    id 'java-library'
+}
+
+group = 'cn.mythicland'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://hub.spigotmc.org/nexus/repository/public/' }
+    maven { url = 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/' }
+    maven { url = 'https://oss.sonatype.org/content/repositories/snapshots/' }
+    maven { url = 'https://repo.dmulloy2.net/repository/public/' }
+    maven { url = 'https://repo.dmulloy2.net/nexus/repository/public/' }
+}
+
+def spigotDirectory = layout.projectDirectory.dir('.gradle/spigot-1.8.8')
+def spigotJar = spigotDirectory.file('spigot-1.8.8.jar')
+
+tasks.register('prepareSpigot188') {
+    outputs.file(spigotJar)
+    onlyIf { !spigotJar.asFile.isFile() }
+    doLast {
+        def directory = spigotDirectory.asFile
+        directory.mkdirs()
+        def buildTools = new File(directory, 'BuildTools.jar')
+        if (!buildTools.isFile()) {
+            new URI('https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar')
+                    .toURL()
+                    .withInputStream { input -> buildTools.withOutputStream { output -> output << input } }
+        }
+        def windows = System.getProperty('os.name').toLowerCase().contains('windows')
+        def jdkDirectory = new File(directory, 'jdk8')
+        def configuredJava8 = System.getenv('JAVA8_HOME')
+                ?: System.getenv().find { key, ignored -> key.startsWith('JAVA_HOME_8') }?.value
+        def javaExecutable = configuredJava8 == null ? null : new File(
+                configuredJava8,
+                'bin/java' + (windows ? '.exe' : '')
+        )
+        if (javaExecutable != null && !javaExecutable.isFile()) javaExecutable = null
+        if (javaExecutable == null) javaExecutable = windows ? fileTree('C:/Program Files/Java').matching {
+            include 'jdk8*/bin/java.exe'
+        }.files.find() : fileTree('/usr/lib/jvm').matching {
+            include '**/bin/java'
+        }.files.find { it.absolutePath.contains('8') }
+        if (javaExecutable == null) javaExecutable = fileTree(jdkDirectory).matching {
+            include windows ? '**/java.exe' : '**/bin/java'
+        }.files.find { it.name == (windows ? 'java.exe' : 'java') }
+        if (javaExecutable == null) {
+            def platform = windows ? 'windows' : (System.getProperty('os.name').toLowerCase().contains('mac') ? 'mac' : 'linux')
+            def archive = new File(directory, windows ? 'jdk8.zip' : 'jdk8.tar.gz')
+            if (archive.isFile() && archive.length() == 0L) archive.delete()
+            new URI("https://api.adoptium.net/v3/binary/latest/8/ga/${platform}/x64/jdk/hotspot/normal/eclipse")
+                    .toURL()
+                    .withInputStream { input -> archive.withOutputStream { output -> output << input } }
+            copy {
+                from windows ? zipTree(archive) : tarTree(resources.gzip(archive))
+                into jdkDirectory
+            }
+            javaExecutable = fileTree(jdkDirectory).matching {
+                include windows ? '**/java.exe' : '**/bin/java'
+            }.files.find { it.name == (windows ? 'java.exe' : 'java') }
+            if (javaExecutable == null) throw new GradleException('Unable to locate downloaded Java 8 executable')
+        }
+        def buildToolsMaven = new File(directory, 'apache-maven-3.9.6')
+        if (!buildToolsMaven.isDirectory()) {
+            def mavenOutput = new ByteArrayOutputStream()
+            def mavenResult = exec {
+                commandLine windows ? ['cmd.exe', '/c', 'mvn.cmd', '-v'] : ['mvn', '-v']
+                standardOutput = mavenOutput
+                ignoreExitValue = true
+            }
+            if (mavenResult.exitValue == 0) {
+                def mavenHomeLine = mavenOutput.toString('UTF-8').readLines().find { it.startsWith('Maven home:') }
+                if (mavenHomeLine != null) {
+                    copy {
+                        from mavenHomeLine.substring('Maven home:'.length()).trim()
+                        into buildToolsMaven
+                    }
+                }
+            }
+        }
+        exec {
+            workingDir directory
+            if (windows) {
+                def gitExecutable = ['where.exe', 'git.exe'].execute().text.readLines().first()
+                def bashExecutable = new File(new File(gitExecutable).parentFile.parentFile, 'bin/bash.exe')
+                def command = "'${javaExecutable.absolutePath.replace('\\', '/')}' -jar '${buildTools.absolutePath.replace('\\', '/')}' --rev 1.8.8 --output-dir '${directory.absolutePath.replace('\\', '/')}'"
+                commandLine bashExecutable.absolutePath, '-lc', command
+            } else {
+                commandLine javaExecutable.absolutePath, '-jar', buildTools.absolutePath,
+                        '--rev', '1.8.8', '--output-dir', directory.absolutePath
+            }
+        }
+        if (!spigotJar.asFile.isFile()) {
+            throw new GradleException('BuildTools did not produce spigot-1.8.8.jar')
+        }
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
+}
+
+dependencies {
+    implementation 'it.unimi.dsi:fastutil:8.5.13'
+    compileOnly files(spigotJar)
+    compileOnly 'net.dmulloy2:ProtocolLib:5.4.0'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.mockito:mockito-core:5.12.0'
+    testImplementation files(spigotJar)
+    testImplementation 'net.dmulloy2:ProtocolLib:5.4.0'
+    testImplementation 'junit:junit:4.13.2'
+    testRuntimeOnly 'org.junit.vintage:junit-vintage-engine:5.10.2'
+}
+
+tasks.named('compileJava') {
+    dependsOn tasks.named('prepareSpigot188')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release.set(21)
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    jvmArgs '-Xshare:off'
+}
+
+tasks.withType(AbstractArchiveTask).configureEach {
+    archiveVersion.set('')
+}
+
+tasks.named('jar') {
+    archiveFileName = 'MythicNPCLib.jar'
+}
+
+tasks.named('sourcesJar') {
+    archiveFileName = 'MythicNPCLib-sources.jar'
+}
