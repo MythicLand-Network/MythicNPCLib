@@ -1,4 +1,5 @@
 import java.nio.channels.FileChannel
+import java.nio.channels.OverlappingFileLockException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
@@ -21,7 +22,15 @@ tasks.register('prepareSpigot188') {
                 StandardOpenOption.CREATE,
                 StandardOpenOption.WRITE
         ).withCloseable { channel ->
-            channel.lock().withCloseable {
+            def lock = null
+            while (lock == null) {
+                try {
+                    lock = channel.tryLock()
+                } catch (OverlappingFileLockException ignored) {
+                }
+                if (lock == null) Thread.sleep(200)
+            }
+            lock.withCloseable {
                 File jar = spigot188Jar
                 if (isSpigot188(jar)) return
 
