@@ -1,0 +1,145 @@
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.zip.ZipFile
+
+def spigotDirectory = layout.projectDirectory.dir('.gradle/spigot-1.8.8')
+ext.spigot188Jar = spigotDirectory.file('spigot-1.8.8.jar')
+
+tasks.register('prepareSpigot188') {
+    outputs.file(spigot188Jar)
+    outputs.upToDateWhen { isSpigot188(spigot188Jar.asFile) }
+    onlyIf { !isSpigot188(spigot188Jar.asFile) }
+    doLast {
+        File directory = spigotDirectory.asFile
+        directory.mkdirs()
+        File jar = spigot188Jar.asFile
+        File buildTools = new File(directory, 'BuildTools.jar')
+        if (!isZip(buildTools)) {
+            download(
+                    'https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar',
+                    buildTools
+            )
+        }
+
+        boolean windows = System.getProperty('os.name').toLowerCase().contains('windows')
+        File javaExecutable = resolveJava8(windows, directory)
+        if (javaExecutable == null) {
+            throw new GradleException('BuildTools requires Java 8. Set JAVA8_HOME or provide a Java 8 runtime in the Spigot cache.')
+        }
+
+        exec {
+            workingDir directory
+            if (windows) {
+                String gitExecutable = ['where.exe', 'git.exe'].execute().text.readLines().find()
+                if (gitExecutable == null) throw new GradleException('Git is required to run BuildTools on Windows')
+                File bashExecutable = new File(new File(gitExecutable).parentFile.parentFile, 'bin/bash.exe')
+                String command = "'${javaExecutable.absolutePath.replace('\\', '/')}' -jar '${buildTools.absolutePath.replace('\\', '/')}' --rev 1.8.8 --output-dir '${directory.absolutePath.replace('\\', '/')}'"
+                commandLine bashExecutable.absolutePath, '-lc', command.trim()
+            } else {
+                commandLine javaExecutable.absolutePath, '-jar', buildTools.absolutePath,
+                        '--rev', '1.8.8', '--output-dir', directory.absolutePath
+            }
+        }
+
+        if (!jar.isFile() || !isSpigot188(jar)) {
+            throw new GradleException('BuildTools did not produce a valid Spigot 1.8.8 jar')
+        }
+    }
+}
+
+private File resolveJava8(boolean windows, File directory) {
+    String configured = System.getenv('JAVA8_HOME')
+    if (configured == null) {
+        configured = System.getenv().find { key, ignored -> key.startsWith('JAVA_HOME_8') }?.value
+    }
+    List<File> candidates = []
+    if (configured != null) candidates << new File(configured, 'bin/java' + (windows ? '.exe' : ''))
+    if (windows) {
+        candidates.addAll(fileTree('C:/Program Files/Java').matching { include 'jdk8*/bin/java.exe' }.files)
+    } else {
+        candidates.addAll(fileTree('/usr/lib/jvm').matching { include '**/bin/java' }.files.findAll {
+            it.absolutePath.contains('8')
+        })
+    }
+    candidates.addAll(fileTree(new File(directory, 'jdk8')).matching {
+        include windows ? '**/java.exe' : '**/bin/java'
+    }.files)
+    File javaExecutable = candidates.find { it.isFile() && javaMajorVersion(it) == 8 }
+    if (javaExecutable != null) return javaExecutable
+
+    File jdkDirectory = new File(directory, 'jdk8')
+    File archive = new File(directory, windows ? 'jdk8.zip' : 'jdk8.tar.gz')
+    String platform = windows ? 'windows' : (System.getProperty('os.name').toLowerCase().contains('mac') ? 'mac' : 'linux')
+    download("https://api.adoptium.net/v3/binary/latest/8/ga/${platform}/x64/jdk/hotspot/normal/eclipse", archive)
+    if (windows) {
+        copy { from zipTree(archive); into jdkDirectory }
+    } else {
+        copy { from tarTree(resources.gzip(archive)); into jdkDirectory }
+    }
+    return fileTree(jdkDirectory).matching {
+        include windows ? '**/java.exe' : '**/bin/java'
+    }.files.find { it.name == (windows ? 'java.exe' : 'java') && javaMajorVersion(it) == 8 }
+}
+
+private void download(String url, File target) {
+    File temporary = new File(target.parentFile, "${target.name}.tmp")
+    if (temporary.isFile() && !temporary.delete()) {
+        throw new GradleException("Unable to replace temporary download: ${temporary}")
+    }
+    URLConnection connection = new URI(url).toURL().openConnection()
+    connection.connectTimeout = 30_000
+    connection.readTimeout = 120_000
+    connection.inputStream.withCloseable { input ->
+        temporary.withOutputStream { output -> output << input }
+    }
+    if (temporary.length() == 0L) {
+        temporary.delete()
+        throw new GradleException("Downloaded file is empty: ${url}")
+    }
+    Files.move(
+            temporary.toPath(),
+            target.toPath(),
+            StandardCopyOption.REPLACE_EXISTING
+    )
+}
+
+private boolean isZip(File file) {
+    if (!file.isFile()) return false
+    try {
+        new ZipFile(file).close()
+        return true
+    } catch (IOException ignored) {
+        return false
+    }
+}
+
+private int javaMajorVersion(File executable) {
+    ByteArrayOutputStream output = new ByteArrayOutputStream()
+    try {
+        exec {
+            commandLine executable.absolutePath, '-version'
+            standardError = output
+            standardOutput = output
+            ignoreExitValue = true
+        }
+    } catch (Exception ignored) {
+        return -1
+    }
+    String version = output.toString('UTF-8')
+    def match = version =~ /version\s+"(\d+)(?:\.(\d+))?/
+    if (!match.find()) return -1
+    return match.group(1).toInteger() == 1 ? match.group(2).toInteger() : match.group(1).toInteger()
+}
+
+private boolean isSpigot188(File jar) {
+    try {
+        ZipFile zip = new ZipFile(jar)
+        try {
+            return zip.getEntry('org/bukkit/craftbukkit/v1_8_R3/CraftServer.class') != null
+        } finally {
+            zip.close()
+        }
+    } catch (IOException ignored) {
+        return false
+    }
+}
