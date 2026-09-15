@@ -28,7 +28,7 @@ tasks.register('prepareSpigot188') {
             throw new GradleException('BuildTools requires Java 8. Set JAVA8_HOME or provide a Java 8 runtime in the Spigot cache.')
         }
 
-        runBuildTools(javaExecutable, buildTools, directory)
+        runBuildTools(javaExecutable, buildTools, directory, windows)
 
         if (!jar.isFile() || !isSpigot188(jar)) {
             throw new GradleException('BuildTools did not produce a valid Spigot 1.8.8 jar')
@@ -121,16 +121,32 @@ private int javaMajorVersion(File executable) {
     return match.group(1).toInteger() == 1 ? match.group(2).toInteger() : match.group(1).toInteger()
 }
 
-private void runBuildTools(File javaExecutable, File buildTools, File directory) {
-    Process process = new ProcessBuilder(
-            javaExecutable.absolutePath,
-            '-jar',
-            buildTools.absolutePath,
-            '--rev',
-            '1.8.8',
-            '--output-dir',
-            directory.absolutePath
-    ).directory(directory).inheritIO().start()
+private void runBuildTools(File javaExecutable, File buildTools, File directory, boolean windows) {
+    List<String> command
+    if (windows) {
+        File bash = resolveWindowsBash()
+        String bashCommand = [
+                shellQuote(javaExecutable.absolutePath),
+                '-jar',
+                shellQuote(buildTools.absolutePath),
+                '--rev',
+                '1.8.8',
+                '--output-dir',
+                shellQuote(directory.absolutePath)
+        ].join(' ')
+        command = [bash.absolutePath, '-lc', bashCommand]
+    } else {
+        command = [
+                javaExecutable.absolutePath,
+                '-jar',
+                buildTools.absolutePath,
+                '--rev',
+                '1.8.8',
+                '--output-dir',
+                directory.absolutePath
+        ]
+    }
+    Process process = new ProcessBuilder(command).directory(directory).inheritIO().start()
     if (!process.waitFor(30, TimeUnit.MINUTES)) {
         process.destroyForcibly()
         throw new GradleException('BuildTools timed out after 30 minutes')
@@ -138,6 +154,27 @@ private void runBuildTools(File javaExecutable, File buildTools, File directory)
     if (process.exitValue() != 0) {
         throw new GradleException("BuildTools failed with exit code ${process.exitValue()}")
     }
+}
+
+private File resolveWindowsBash() {
+    Process where = new ProcessBuilder('where.exe', 'git.exe')
+            .redirectErrorStream(true)
+            .start()
+    if (!where.waitFor(10, TimeUnit.SECONDS)) {
+        where.destroyForcibly()
+        throw new GradleException('Unable to locate Git bash.exe within 10 seconds')
+    }
+    String gitPath = where.inputStream.getText('UTF-8').readLines().find { !it.isBlank() }
+    if (where.exitValue() != 0 || gitPath == null) {
+        throw new GradleException('Git is required to run BuildTools on Windows')
+    }
+    File bash = new File(new File(gitPath.trim()).parentFile.parentFile, 'bin/bash.exe')
+    if (!bash.isFile()) throw new GradleException('Git bash.exe is missing: ' + bash)
+    return bash
+}
+
+private String shellQuote(String path) {
+    return "'${path.replace('\\', '/').replace("'", "'\\''")}'"
 }
 
 private boolean isSpigot188(File jar) {
