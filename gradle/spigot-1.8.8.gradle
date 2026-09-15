@@ -1,37 +1,50 @@
+import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipFile
 
-def spigotDirectory = layout.projectDirectory.dir('.gradle/spigot-1.8.8')
-ext.spigot188Jar = spigotDirectory.file('spigot-1.8.8.jar')
+def spigotDirectory = new File(gradle.gradleUserHomeDir, 'caches/mythicland/spigot-1.8.8')
+ext.spigot188Jar = new File(spigotDirectory, 'spigot-1.8.8.jar')
 
 tasks.register('prepareSpigot188') {
     outputs.file(spigot188Jar)
-    outputs.upToDateWhen { isSpigot188(spigot188Jar.asFile) }
-    onlyIf { !isSpigot188(spigot188Jar.asFile) }
+    outputs.upToDateWhen { isSpigot188(spigot188Jar) }
+    onlyIf { !isSpigot188(spigot188Jar) }
     doLast {
-        File directory = spigotDirectory.asFile
+        File directory = spigotDirectory
         directory.mkdirs()
-        File jar = spigot188Jar.asFile
-        File buildTools = new File(directory, 'BuildTools.jar')
-        if (!isZip(buildTools)) {
-            download(
-                    'https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar',
-                    buildTools
-            )
-        }
+        File lockFile = new File(directory, 'prepare.lock')
+        FileChannel.open(
+                lockFile.toPath(),
+                StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE
+        ).withCloseable { channel ->
+            channel.lock().withCloseable {
+                File jar = spigot188Jar
+                if (isSpigot188(jar)) return
 
-        boolean windows = System.getProperty('os.name').toLowerCase().contains('windows')
-        File javaExecutable = resolveJava8(windows, directory)
-        if (javaExecutable == null) {
-            throw new GradleException('BuildTools requires Java 8. Set JAVA8_HOME or provide a Java 8 runtime in the Spigot cache.')
-        }
+                File buildTools = new File(directory, 'BuildTools.jar')
+                if (!isZip(buildTools)) {
+                    download(
+                            'https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar',
+                            buildTools
+                    )
+                }
 
-        runBuildTools(javaExecutable, buildTools, directory, windows)
+                boolean windows = System.getProperty('os.name').toLowerCase().contains('windows')
+                File javaExecutable = resolveJava8(windows, directory)
+                if (javaExecutable == null) {
+                    throw new GradleException('BuildTools requires Java 8. Set JAVA8_HOME or provide a Java 8 runtime in the Spigot cache.')
+                }
 
-        if (!jar.isFile() || !isSpigot188(jar)) {
-            throw new GradleException('BuildTools did not produce a valid Spigot 1.8.8 jar')
+                runBuildTools(javaExecutable, buildTools, directory, windows)
+
+                if (!jar.isFile() || !isSpigot188(jar)) {
+                    throw new GradleException('BuildTools did not produce a valid Spigot 1.8.8 jar')
+                }
+            }
         }
     }
 }
