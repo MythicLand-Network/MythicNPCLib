@@ -1,5 +1,6 @@
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipFile
 
 def spigotDirectory = layout.projectDirectory.dir('.gradle/spigot-1.8.8')
@@ -27,19 +28,7 @@ tasks.register('prepareSpigot188') {
             throw new GradleException('BuildTools requires Java 8. Set JAVA8_HOME or provide a Java 8 runtime in the Spigot cache.')
         }
 
-        exec {
-            workingDir directory
-            if (windows) {
-                String gitExecutable = ['where.exe', 'git.exe'].execute().text.readLines().find()
-                if (gitExecutable == null) throw new GradleException('Git is required to run BuildTools on Windows')
-                File bashExecutable = new File(new File(gitExecutable).parentFile.parentFile, 'bin/bash.exe')
-                String command = "'${javaExecutable.absolutePath.replace('\\', '/')}' -jar '${buildTools.absolutePath.replace('\\', '/')}' --rev 1.8.8 --output-dir '${directory.absolutePath.replace('\\', '/')}'"
-                commandLine bashExecutable.absolutePath, '-lc', command.trim()
-            } else {
-                commandLine javaExecutable.absolutePath, '-jar', buildTools.absolutePath,
-                        '--rev', '1.8.8', '--output-dir', directory.absolutePath
-            }
-        }
+        runBuildTools(javaExecutable, buildTools, directory)
 
         if (!jar.isFile() || !isSpigot188(jar)) {
             throw new GradleException('BuildTools did not produce a valid Spigot 1.8.8 jar')
@@ -114,21 +103,41 @@ private boolean isZip(File file) {
 }
 
 private int javaMajorVersion(File executable) {
-    ByteArrayOutputStream output = new ByteArrayOutputStream()
+    Process process
     try {
-        exec {
-            commandLine executable.absolutePath, '-version'
-            standardError = output
-            standardOutput = output
-            ignoreExitValue = true
+        process = new ProcessBuilder(executable.absolutePath, '-version')
+                .redirectErrorStream(true)
+                .start()
+        if (!process.waitFor(10, TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            return -1
         }
-    } catch (Exception ignored) {
+    } catch (IOException ignored) {
         return -1
     }
-    String version = output.toString('UTF-8')
+    String version = process.inputStream.getText('UTF-8')
     def match = version =~ /version\s+"(\d+)(?:\.(\d+))?/
     if (!match.find()) return -1
     return match.group(1).toInteger() == 1 ? match.group(2).toInteger() : match.group(1).toInteger()
+}
+
+private void runBuildTools(File javaExecutable, File buildTools, File directory) {
+    Process process = new ProcessBuilder(
+            javaExecutable.absolutePath,
+            '-jar',
+            buildTools.absolutePath,
+            '--rev',
+            '1.8.8',
+            '--output-dir',
+            directory.absolutePath
+    ).directory(directory).inheritIO().start()
+    if (!process.waitFor(30, TimeUnit.MINUTES)) {
+        process.destroyForcibly()
+        throw new GradleException('BuildTools timed out after 30 minutes')
+    }
+    if (process.exitValue() != 0) {
+        throw new GradleException("BuildTools failed with exit code ${process.exitValue()}")
+    }
 }
 
 private boolean isSpigot188(File jar) {
