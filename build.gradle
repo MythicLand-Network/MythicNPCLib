@@ -1,6 +1,9 @@
 plugins {
+    id 'idea'
     id 'java-library'
 }
+
+idea.module.name = name
 
 group = 'cn.mythicland'
 version = '1.0.0'

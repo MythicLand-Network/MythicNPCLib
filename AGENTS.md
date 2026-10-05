@@ -1,3 +1,2 @@
-# Repository instructions
-
-Before modifying Java source, read `docs/code-style.md` in full and follow it.
+- [开发工作流](../docs/development-workflow.md)
+- [Java 代码规范](../docs/code-style.md)
