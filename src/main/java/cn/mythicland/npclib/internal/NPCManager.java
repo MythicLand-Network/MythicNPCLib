@@ -9,6 +9,7 @@ import org.bukkit.entity.Player;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author Jitse Boonstra
@@ -17,6 +18,7 @@ public final class NPCManager {
 
     private static final Set<NPCBase> npcs = ConcurrentHashMap.newKeySet();
     private static final ConcurrentHashMap<Integer, NPCBase> npcsByEntityId = new ConcurrentHashMap<>();
+    private static final AtomicInteger nextEntityId = new AtomicInteger(Integer.MAX_VALUE);
 
     private NPCManager() {
         throw new SecurityException("You cannot initialize this class.");
@@ -24,6 +26,10 @@ public final class NPCManager {
 
     public static Set<NPCBase> getAllNPCs() {
         return npcs;
+    }
+
+    static int allocateEntityId() {
+        return nextEntityId.getAndDecrement();
     }
 
     public static NPCBase getByEntityId(int entityId) {

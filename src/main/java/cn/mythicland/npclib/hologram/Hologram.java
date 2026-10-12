@@ -114,6 +114,7 @@ public class Hologram {
     private final List<Object> metaPackets = new ArrayList<>();
 
     private final MinecraftVersion version;
+    private final Reflection.MethodInvoker customNameMethod;
     private final Location start;
     private final Object worldServer;
 
@@ -121,6 +122,11 @@ public class Hologram {
 
     public Hologram(MinecraftVersion version, Location location, List<String> text) {
         this.version = version;
+        this.customNameMethod = Reflection.getMethod(
+                ENTITY_CLASS,
+                "setCustomName",
+                version.isAboveOrEqual(MinecraftVersion.V1_13_R1) ? CHAT_BASE_COMPONENT_CLASS : String.class
+        );
         this.start = location;
         this.text = text;
 
@@ -145,12 +151,6 @@ public class Hologram {
                 boolean.class
         )
                 : null);
-
-        Reflection.MethodInvoker customNameMethod = Reflection.getMethod(
-                ENTITY_CLASS,
-                "setCustomName",
-                version.isAboveOrEqual(MinecraftVersion.V1_13_R1) ? CHAT_BASE_COMPONENT_CLASS : String.class
-        );
 
         Reflection.MethodInvoker customNameVisibilityMethod =
                 Reflection.getMethod(ENTITY_CLASS, "setCustomNameVisible", boolean.class);
@@ -256,22 +256,18 @@ public class Hologram {
     }
 
     public List<Object> getUpdatePackets(List<String> text) {
+        if (this.text.equals(text)) return List.of();
         List<Object> updatePackets = new ArrayList<>();
 
         if (this.text.size() != text.size()) {
             text = text.subList(0, this.text.size());
         }
 
-        Reflection.MethodInvoker customNameMethod = Reflection.getMethod(
-                ENTITY_CLASS,
-                "setCustomName",
-                version.isAboveOrEqual(MinecraftVersion.V1_13_R1) ? CHAT_BASE_COMPONENT_CLASS : String.class
-        );
-
         for (int i = 0; i < text.size(); i++) {
-            Object entityArmorStand = armorStands.get(i);
             String oldLine = this.text.get(i);
             String newLine = text.get(i);
+            if (oldLine.equals(newLine)) continue;
+            Object entityArmorStand = armorStands.get(i);
 
             customNameMethod.invoke(
                     entityArmorStand,

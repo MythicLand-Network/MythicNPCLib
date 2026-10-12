@@ -31,7 +31,7 @@ import java.util.*;
 public abstract class NPCBase implements NPC, NPCPacketHandler {
 
     static int viewDistance = Bukkit.getViewDistance();
-    protected final int entityId = Integer.MAX_VALUE - NPCManager.getAllNPCs().size();
+    protected final int entityId = NPCManager.allocateEntityId();
     protected final Set<UUID> hasTeamRegistered = new ObjectOpenHashSet<>();
     protected final Set<NPCState> activeStates = EnumSet.noneOf(NPCState.class);
     protected final Map<NPCSlot, ItemStack> items = new EnumMap<>(NPCSlot.class);
@@ -103,6 +103,9 @@ public abstract class NPCBase implements NPC, NPCPacketHandler {
                 List<Object> updatePackets = hologram.getUpdatePackets(text);
                 hologram.update(player, updatePackets);
             }
+        } else {
+            Hologram hologram = playerHologram.get(player.getUniqueId());
+            if (hologram != null) hologram.getUpdatePackets(text);
         }
         return this;
     }

@@ -47,6 +47,7 @@ public final class MojangSkinService {
     private final Map<String, Skin> lastKnownSkins;
     private final Map<String, CompletableFuture<Optional<Skin>>> inFlightRequests;
     private final Path cacheFile;
+    private volatile SkinCacheStore persistentCache;
     private final String mojangApiRoot;
     private final String sessionServerRoot;
     private final String mineToolsApiRoot;
@@ -93,6 +94,15 @@ public final class MojangSkinService {
 
         Optional<Skin> resolvedSkin = Optional.empty();
         try {
+            if (cached == null && this.persistentCache != null) {
+                resolvedSkin = this.persistentCache.load(key);
+                if (resolvedSkin.isPresent()) {
+                    Skin skin = resolvedSkin.orElseThrow();
+                    this.lastKnownSkins.put(key, skin);
+                    this.cache.put(key, new CacheEntry(skin, now + TTL_MILLIS));
+                    return resolvedSkin;
+                }
+            }
             resolvedSkin = this.fetchOfficialSkin(normalizedPlayerName)
                     .or(() -> this.fetchMineToolsSkin(normalizedPlayerName));
             if (resolvedSkin.isPresent()) {
@@ -102,7 +112,8 @@ public final class MojangSkinService {
                         key,
                         new CacheEntry(skin, System.currentTimeMillis() + TTL_MILLIS)
                 );
-                this.persistCache();
+                if (this.persistentCache != null) this.persistentCache.save(key, skin);
+                else this.persistCache();
             } else {
                 Skin lastKnownSkin = this.lastKnownSkins.get(key);
                 if (lastKnownSkin != null) resolvedSkin = Optional.of(lastKnownSkin);
@@ -112,6 +123,10 @@ public final class MojangSkinService {
             request.complete(resolvedSkin);
             this.inFlightRequests.remove(key, request);
         }
+    }
+
+    public void setPersistentCache(SkinCacheStore store) {
+        this.persistentCache = java.util.Objects.requireNonNull(store, "store");
     }
 
     private Optional<Skin> fetchOfficialSkin(String playerName) {
