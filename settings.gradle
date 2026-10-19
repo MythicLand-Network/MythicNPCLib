@@ -1,1 +1,9 @@
 rootProject.name = 'mythic-npclib'
+
+def frameworkDirectory = file('../MythicFramework')
+
+if (!frameworkDirectory.isDirectory()) {
+    throw new GradleException("Missing sibling project MythicFramework: ${frameworkDirectory}")
+}
+
+includeBuild(frameworkDirectory)

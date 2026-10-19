@@ -9,6 +9,7 @@ import cn.mythicland.npclib.api.NPC;
 import cn.mythicland.npclib.api.utilities.Logger;
 import cn.mythicland.npclib.listeners.*;
 import cn.mythicland.npclib.nms.v1_8_R3.NPC_v1_8_R3;
+import org.bukkit.entity.Villager;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.PluginManager;
@@ -119,6 +120,12 @@ public final class NPCLib {
      */
     public NPC createNPC() {
         return createNPC(null);
+    }
+
+    public NPC createVillagerNPC(List<String> text, Villager.Profession profession) {
+        NPC npc = NPC_v1_8_R3.villager(this, text, profession);
+        this.ownedNpcs.add(npc);
+        return npc;
     }
 
     public void shutdown() {

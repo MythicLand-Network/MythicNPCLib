@@ -1,7 +1,7 @@
 package cn.mythicland.npclib.hologram;
 
 import cn.mythicland.npclib.internal.MinecraftVersion;
-import cn.mythicland.npclib.utilities.Reflection;
+import cn.mythicland.framework.bukkit.reflect.Reflection;
 import net.minecraft.server.v1_8_R3.DispenserRegistry;
 import net.minecraft.server.v1_8_R3.Entity;
 import net.minecraft.server.v1_8_R3.EntityArmorStand;

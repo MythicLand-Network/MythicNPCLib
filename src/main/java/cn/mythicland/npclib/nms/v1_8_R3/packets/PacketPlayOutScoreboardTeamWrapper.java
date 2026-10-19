@@ -4,7 +4,7 @@
 
 package cn.mythicland.npclib.nms.v1_8_R3.packets;
 
-import cn.mythicland.npclib.utilities.Reflection;
+import cn.mythicland.framework.bukkit.reflect.Reflection;
 import net.minecraft.server.v1_8_R3.PacketPlayOutScoreboardTeam;
 
 import java.util.Collection;

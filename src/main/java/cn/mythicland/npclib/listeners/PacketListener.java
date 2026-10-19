@@ -13,7 +13,7 @@ import cn.mythicland.npclib.NPCLib;
 import cn.mythicland.npclib.api.events.NPCInteractEvent;
 import cn.mythicland.npclib.internal.NPCBase;
 import cn.mythicland.npclib.internal.NPCManager;
-import cn.mythicland.npclib.utilities.Reflection;
+import cn.mythicland.framework.bukkit.reflect.Reflection;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;

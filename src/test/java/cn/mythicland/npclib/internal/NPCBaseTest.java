@@ -3,7 +3,7 @@ package cn.mythicland.npclib.internal;
 import cn.mythicland.npclib.NPCLib;
 import cn.mythicland.npclib.hologram.Hologram;
 import cn.mythicland.npclib.nms.v1_8_R3.NPC_v1_8_R3;
-import cn.mythicland.npclib.utilities.Reflection;
+import cn.mythicland.framework.bukkit.reflect.Reflection;
 import net.minecraft.server.v1_8_R3.*;
 import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.v1_8_R3.CraftServer;

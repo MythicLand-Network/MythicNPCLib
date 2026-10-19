@@ -5,7 +5,7 @@
 package cn.mythicland.npclib.hologram;
 
 import cn.mythicland.npclib.internal.MinecraftVersion;
-import cn.mythicland.npclib.utilities.Reflection;
+import cn.mythicland.framework.bukkit.reflect.Reflection;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.craftbukkit.v1_8_R3.CraftWorld;

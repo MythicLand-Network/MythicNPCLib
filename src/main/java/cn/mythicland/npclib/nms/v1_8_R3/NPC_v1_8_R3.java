@@ -15,9 +15,11 @@ import cn.mythicland.npclib.nms.v1_8_R3.packets.*;
 import net.minecraft.server.v1_8_R3.*;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.craftbukkit.v1_8_R3.CraftWorld;
 import org.bukkit.craftbukkit.v1_8_R3.entity.CraftPlayer;
 import org.bukkit.craftbukkit.v1_8_R3.inventory.CraftItemStack;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Villager;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 
@@ -25,6 +27,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -36,6 +39,8 @@ public class NPC_v1_8_R3 extends NPCBase {
     private final Set<UUID> profileViewers = new HashSet<>();
     private final Map<UUID, Long> profileGenerations = new HashMap<>();
     private long nextProfileGeneration;
+    private final Villager.Profession villagerProfession;
+    private PacketPlayOutSpawnEntityLiving packetPlayOutVillagerSpawn;
     private PacketPlayOutNamedEntitySpawn packetPlayOutNamedEntitySpawn;
     private PacketPlayOutScoreboardTeam packetPlayOutScoreboardTeamRegister;
     private PacketPlayOutPlayerInfo packetPlayOutPlayerInfoAdd, packetPlayOutPlayerInfoRemove;
@@ -43,7 +48,16 @@ public class NPC_v1_8_R3 extends NPCBase {
     private PacketPlayOutEntityDestroy packetPlayOutEntityDestroy;
 
     public NPC_v1_8_R3(NPCLib instance, List<String> lines) {
+        this(instance, lines, null);
+    }
+
+    private NPC_v1_8_R3(NPCLib instance, List<String> lines, Villager.Profession villagerProfession) {
         super(instance, lines);
+        this.villagerProfession = villagerProfession;
+    }
+
+    public static NPC_v1_8_R3 villager(NPCLib instance, List<String> lines, Villager.Profession profession) {
+        return new NPC_v1_8_R3(instance, lines, Objects.requireNonNull(profession));
     }
 
     @Override
@@ -67,6 +81,13 @@ public class NPC_v1_8_R3 extends NPCBase {
 
     @Override
     public void createPackets(Player player) {
+
+        if (this.villagerProfession != null) {
+            this.packetPlayOutVillagerSpawn = this.createVillagerSpawnPacket();
+            this.packetPlayOutEntityHeadRotation = new PacketPlayOutEntityHeadRotationWrapper().create(location, entityId);
+            this.packetPlayOutEntityDestroy = new PacketPlayOutEntityDestroy(entityId);
+            return;
+        }
 
         PacketPlayOutPlayerInfoWrapper packetPlayOutPlayerInfoWrapper = new PacketPlayOutPlayerInfoWrapper();
 
@@ -107,6 +128,12 @@ public class NPC_v1_8_R3 extends NPCBase {
     @Override
     public void sendShowPackets(Player player) {
         PlayerConnection playerConnection = ((CraftPlayer) player).getHandle().playerConnection;
+        if (this.villagerProfession != null) {
+            playerConnection.sendPacket(this.packetPlayOutVillagerSpawn);
+            playerConnection.sendPacket(this.packetPlayOutEntityHeadRotation);
+            getHologram(player).show(player);
+            return;
+        }
         UUID viewerUniqueId = player.getUniqueId();
         long profileGeneration = ++this.nextProfileGeneration;
         this.profileGenerations.put(viewerUniqueId, profileGeneration);
@@ -141,7 +168,11 @@ public class NPC_v1_8_R3 extends NPCBase {
             throw new IllegalArgumentException("NPC teleport must remain in the same world: " + getId());
         }
         this.location = destination.clone();
-        this.packetPlayOutNamedEntitySpawn = new PacketPlayOutNamedEntitySpawnWrapper().create(uuid, location, entityId);
+        if (this.villagerProfession != null) {
+            this.packetPlayOutVillagerSpawn = this.createVillagerSpawnPacket();
+        } else {
+            this.packetPlayOutNamedEntitySpawn = new PacketPlayOutNamedEntitySpawnWrapper().create(uuid, location, entityId);
+        }
         this.packetPlayOutEntityHeadRotation = new PacketPlayOutEntityHeadRotationWrapper().create(location, entityId);
         PacketPlayOutEntityTeleport packet = new PacketPlayOutEntityTeleport(
                 entityId,
@@ -277,6 +308,15 @@ public class NPC_v1_8_R3 extends NPCBase {
         this.profileGenerations.remove(player.getUniqueId());
         PlayerConnection playerConnection = ((CraftPlayer) player).getHandle().playerConnection;
         playerConnection.sendPacket(packetPlayOutPlayerInfoRemove);
+    }
+
+    private PacketPlayOutSpawnEntityLiving createVillagerSpawnPacket() {
+        EntityVillager villager = new EntityVillager(((CraftWorld) location.getWorld()).getHandle());
+        villager.d(entityId);
+        villager.setProfession(this.villagerProfession.getId());
+        villager.setPositionRotation(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+        villager.aK = location.getYaw();
+        return new PacketPlayOutSpawnEntityLiving(villager);
     }
 
     private boolean isCurrentProfile(UUID viewerUniqueId, long profileGeneration) {
