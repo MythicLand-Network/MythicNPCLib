@@ -2,13 +2,18 @@ package cn.mythicland.npclib.internal;
 
 import cn.mythicland.npclib.NPCLib;
 import cn.mythicland.npclib.hologram.Hologram;
+import cn.mythicland.npclib.listeners.ChunkListener;
 import cn.mythicland.npclib.nms.v1_8_R3.NPC_v1_8_R3;
 import cn.mythicland.framework.bukkit.reflect.Reflection;
 import net.minecraft.server.v1_8_R3.*;
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
+import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.craftbukkit.v1_8_R3.CraftServer;
 import org.bukkit.craftbukkit.v1_8_R3.entity.CraftPlayer;
 import org.bukkit.plugin.PluginManager;
+import org.bukkit.event.world.ChunkLoadEvent;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
@@ -18,6 +23,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.*;
 
 public class NPCBaseTest {
@@ -54,6 +61,7 @@ public class NPCBaseTest {
             npc.getShown().add(player.getUniqueId());
             doReturn(true).when(npc).inRangeOf(player);
             doReturn(true).when(npc).inViewOf(player);
+            doReturn(true).when(npc).isLocationChunkLoaded();
             doAnswer(ignored -> {
                 hologram.hide(player);
                 return null;
@@ -78,6 +86,55 @@ public class NPCBaseTest {
                     assertEquals(latestText, line.getCustomName());
                     verify(connection).sendPacket((Packet<?>) showPackets.getFirst());
                 }
+            } finally {
+                NPCManager.remove(npc);
+            }
+        }
+    }
+
+    @Test
+    public void showWaitsForTheNpcChunkToLoad() {
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            CraftServer server = mock(CraftServer.class);
+            PluginManager plugins = mock(PluginManager.class);
+            when(server.getPluginManager()).thenReturn(plugins);
+            bukkit.when(Bukkit::getServer).thenReturn(server);
+            CraftPlayer player = mock(CraftPlayer.class);
+            UUID playerId = UUID.randomUUID();
+            when(player.getUniqueId()).thenReturn(playerId);
+            bukkit.when(() -> Bukkit.getPlayer(playerId)).thenReturn(player);
+            World world = mock(World.class);
+            Chunk chunk = mock(Chunk.class);
+            when(chunk.getWorld()).thenReturn(world);
+            when(chunk.getX()).thenReturn(0);
+            when(chunk.getZ()).thenReturn(0);
+            NPC_v1_8_R3 original = new NPC_v1_8_R3(mock(NPCLib.class), List.of());
+            NPCManager.remove(original);
+            NPC_v1_8_R3 npc = spy(original);
+            NPCManager.add(npc);
+            npc.setLocation(new Location(world, 1, 64, 1));
+            doReturn(false).when(npc).isLocationChunkLoaded();
+            doReturn(true).when(npc).inRangeOf(player);
+            doReturn(true).when(npc).inViewOf(player);
+            doNothing().when(npc).sendShowPackets(player);
+            doNothing().when(npc).sendMetadataPacket(player);
+            doNothing().when(npc).sendEquipmentPackets(player);
+            try {
+                npc.show(player);
+                assertTrue(npc.getShown().contains(player.getUniqueId()));
+                assertFalse(npc.isShown(player));
+                verify(npc, never()).sendShowPackets(player);
+
+                doReturn(true).when(npc).isLocationChunkLoaded();
+                doReturn(false).when(npc).inViewOf(player);
+                ChunkListener listener = new ChunkListener();
+                listener.onChunkLoad(new ChunkLoadEvent(chunk, false));
+                assertFalse(npc.isShown(player));
+                verify(npc, never()).sendShowPackets(player);
+                doReturn(true).when(npc).inViewOf(player);
+                listener.onChunkLoad(new ChunkLoadEvent(chunk, false));
+                assertTrue(npc.isShown(player));
+                verify(npc).sendShowPackets(player);
             } finally {
                 NPCManager.remove(npc);
             }

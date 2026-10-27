@@ -14,6 +14,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
@@ -28,6 +29,16 @@ public class PlayerListener extends HandleMoveBase implements Listener {
 
     public PlayerListener(NPCLib instance) {
         this.instance = instance;
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        if (!this.instance.hasAutomaticNpcs()) return;
+        Player player = event.getPlayer();
+        this.instance.getPlugin().getServer().getScheduler().runTask(this.instance.getPlugin(), () -> {
+            if (!player.isOnline()) return;
+            this.instance.showAutomaticNpcs(player);
+        });
     }
 
     @EventHandler

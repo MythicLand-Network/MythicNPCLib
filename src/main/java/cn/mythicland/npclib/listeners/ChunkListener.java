@@ -82,7 +82,7 @@ public class ChunkListener implements Listener {
                 if (player == null)
                     continue; // Couldn't find the player, so skip.
 
-                if (npc.inRangeOf(player)) {
+                if (npc.inRangeOf(player) && npc.inViewOf(player)) {
                     npc.show(player, true);
                 }
             }

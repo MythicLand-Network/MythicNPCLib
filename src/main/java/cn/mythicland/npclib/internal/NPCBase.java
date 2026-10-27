@@ -10,6 +10,7 @@ import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import cn.mythicland.npclib.NPCLib;
 import cn.mythicland.npclib.api.NPC;
+import cn.mythicland.npclib.api.PacketNpc;
 import cn.mythicland.npclib.api.events.NPCHideEvent;
 import cn.mythicland.npclib.api.events.NPCShowEvent;
 import cn.mythicland.npclib.api.skin.Skin;
@@ -28,7 +29,7 @@ import org.bukkit.util.Vector;
 
 import java.util.*;
 
-public abstract class NPCBase implements NPC, NPCPacketHandler {
+public abstract class NPCBase implements PacketNpc, NPCPacketHandler {
 
     static int viewDistance = Bukkit.getViewDistance();
     protected final int entityId = NPCManager.allocateEntityId();
@@ -153,6 +154,7 @@ public abstract class NPCBase implements NPC, NPCPacketHandler {
     @Override
     public void destroy() {
         NPCManager.remove(this);
+        this.instance.forgetNPC(this);
 
         // Destroy NPC for every player that is still seeing it.
         for (UUID uuid : shown) {
@@ -281,7 +283,7 @@ public abstract class NPCBase implements NPC, NPCPacketHandler {
             // Adding the UUID to the set.
             shown.add(player.getUniqueId());
 
-            if (inRangeOf(player) && inViewOf(player)) {
+            if (isLocationChunkLoaded() && inRangeOf(player) && inViewOf(player)) {
                 // The player can see the NPC and is in range, send the packets.
                 sendShowPackets(player);
                 sendMetadataPacket(player);
