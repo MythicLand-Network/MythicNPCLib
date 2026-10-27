@@ -6,10 +6,13 @@ package cn.mythicland.npclib;
 
 import cn.mythicland.npclib.NPCLibOptions.MovementHandling;
 import cn.mythicland.npclib.api.NPC;
+import cn.mythicland.npclib.api.skin.Skin;
 import cn.mythicland.npclib.api.utilities.Logger;
+import cn.mythicland.npclib.bot.v1_8_R3.BotEntity;
 import cn.mythicland.npclib.listeners.*;
 import cn.mythicland.npclib.nms.v1_8_R3.NPC_v1_8_R3;
 import org.bukkit.entity.Villager;
+import org.bukkit.Location;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.PluginManager;
@@ -126,6 +129,18 @@ public final class NPCLib {
         NPC npc = NPC_v1_8_R3.villager(this, text, profession);
         this.ownedNpcs.add(npc);
         return npc;
+    }
+
+    public static BotEntity createBot(Location location, String name, Skin skin) {
+        return createBot(location, new BotEntity.Options(name, name, skin, false,
+                (bot, source) -> bot.destroy(), (bot, sound) -> sound.run()));
+    }
+
+    /**
+     * The caller owns the entity and must call destroy when it is no longer needed.
+     */
+    public static BotEntity createBot(Location location, BotEntity.Options options) {
+        return BotEntity.create(location, options);
     }
 
     public void shutdown() {

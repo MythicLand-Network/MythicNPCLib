@@ -71,7 +71,10 @@ public class VillagerNpcTest {
                         wire.skipBytes(9);
                         List<DataWatcher.WatchableObject> metadata = DataWatcher.b(wire);
                         assertEquals(Villager.Profession.PRIEST.getId(), metadata.stream()
-                                .filter(value -> value.a() == 16).findFirst().orElseThrow().b());
+                                .filter(value -> value.a() == 16)
+                                .findFirst()
+                                .orElseThrow()
+                                .b());
                     } finally {
                         wire.release();
                     }

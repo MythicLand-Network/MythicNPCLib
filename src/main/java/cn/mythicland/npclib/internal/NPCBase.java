@@ -244,7 +244,9 @@ public abstract class NPCBase implements NPC, NPCPacketHandler {
 
     public boolean inViewOf(Player player) {
         if (this.cosFOV <= -1.0D) return true;
-        Vector dir = location.toVector().subtract(player.getEyeLocation().toVector()).normalize();
+        Vector dir = location.toVector()
+                .subtract(player.getEyeLocation().toVector())
+                .normalize();
         return dir.dot(player.getEyeLocation().getDirection()) >= cosFOV;
     }
 
