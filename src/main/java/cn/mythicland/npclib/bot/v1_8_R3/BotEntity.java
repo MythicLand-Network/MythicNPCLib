@@ -1,6 +1,8 @@
 package cn.mythicland.npclib.bot.v1_8_R3;
 
 import cn.mythicland.npclib.api.skin.Skin;
+import cn.mythicland.npclib.bot.BotHandle;
+import cn.mythicland.npclib.bot.BotOptions;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import net.minecraft.server.v1_8_R3.*;
@@ -16,7 +18,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
-public class BotEntity extends EntityPlayer {
+public class BotEntity extends EntityPlayer implements BotHandle {
     private static final IChatBaseComponent TAB_NAME = new ChatComponentText("");
     private static final Field WORLD_ACCESSES = field(World.class, "u");
     private static final Field PLAYER_STATISTICS = field(PlayerList.class, "o");
@@ -40,6 +42,14 @@ public class BotEntity extends EntityPlayer {
             Objects.requireNonNull(deathHandler, "deathHandler");
             Objects.requireNonNull(stepHandler, "stepHandler");
         }
+    }
+
+    public static BotEntity create(Location location, BotOptions options) {
+        return create(location, new Options(options.name(), options.displayName(), options.skin(), options.walking(),
+                (bot, source) -> options.deathHandler().onDeath(bot,
+                        source.getEntity() != null && source.getEntity().getBukkitEntity() instanceof org.bukkit.entity.Player player
+                                ? player : null, source == DamageSource.OUT_OF_WORLD),
+                options.stepHandler()::accept));
     }
 
     public static BotEntity create(Location location, Options options) {
@@ -357,6 +367,17 @@ public class BotEntity extends EntityPlayer {
     protected void a(BlockPosition position, Block block) {
         this.stepHandler.accept(this, () -> super.a(position, block));
     }
+
+    @Override public double x() { return this.locX; }
+    @Override public double y() { return this.locY; }
+    @Override public double z() { return this.locZ; }
+    @Override public float yaw() { return this.yaw; }
+    @Override public float pitch() { return this.pitch; }
+    @Override public void yaw(float yaw) { this.yaw = yaw; }
+    @Override public void pitch(float pitch) { this.pitch = pitch; }
+    @Override public boolean onGround() { return this.onGround; }
+    @Override public void collidable(boolean collidable) { this.collidesWithEntities = collidable; }
+    @Override public void clearArrows() { this.o(0); }
 
     public void transfer(Location location) {
         destroy();

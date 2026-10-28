@@ -9,6 +9,9 @@ import cn.mythicland.npclib.api.NPC;
 import cn.mythicland.npclib.api.PacketNpc;
 import cn.mythicland.npclib.api.PacketNpcOptions;
 import cn.mythicland.npclib.api.utilities.Logger;
+import cn.mythicland.npclib.bot.BotHandle;
+import cn.mythicland.npclib.bot.BotOptions;
+import cn.mythicland.npclib.bot.BotVisibility;
 import cn.mythicland.npclib.bot.FighterRobot;
 import cn.mythicland.npclib.bot.FighterRobotOptions;
 import cn.mythicland.npclib.bot.PatrolRobot;
@@ -144,6 +147,15 @@ public final class NPCLib {
         }
     }
 
+    public static BotVisibility createBotVisibility(Consumer<Player> idleHidden) {
+        return new cn.mythicland.npclib.bot.v1_8_R3.BotVisibility(idleHidden);
+    }
+
+    /** Creates an entity whose visibility, behavior, and cleanup are owned by the caller. */
+    public static BotHandle createExternalRobot(Location location, BotOptions options) {
+        return BotEntity.create(location, options);
+    }
+
     public PatrolRobot createPatrolRobot(Location location) {
         return createPatrolRobot(location, options -> { });
     }
@@ -152,7 +164,7 @@ public final class NPCLib {
         PatrolRobotOptions options = new PatrolRobotOptions(location);
         Objects.requireNonNull(configure, "configure").accept(options);
         if (options.externalControl() != null) {
-            return new ExternalPatrolRobot(BotEntity.create(location, options.externalControl()));
+            return new ExternalPatrolRobot(createExternalRobot(location, options.externalControl()));
         }
         return bots().createPatrolRobot(location, options);
     }
@@ -165,7 +177,7 @@ public final class NPCLib {
         FighterRobotOptions options = new FighterRobotOptions();
         Objects.requireNonNull(configure, "configure").accept(options);
         if (options.externalControl() != null) {
-            return new ExternalFighterRobot(BotEntity.create(location, options.externalControl()));
+            return new ExternalFighterRobot(createExternalRobot(location, options.externalControl()));
         }
         return bots().createFighterRobot(location, options);
     }
@@ -224,21 +236,21 @@ public final class NPCLib {
     }
 
     private abstract static class ExternalRobot implements AutoCloseable {
-        private final BotEntity entity;
+        private final BotHandle entity;
 
-        private ExternalRobot(BotEntity entity) { this.entity = entity; }
+        private ExternalRobot(BotHandle entity) { this.entity = entity; }
 
-        public BotEntity entity() { return this.entity; }
+        public BotHandle entity() { return this.entity; }
 
         @Override
         public void close() { this.entity.destroy(); }
     }
 
     private static final class ExternalPatrolRobot extends ExternalRobot implements PatrolRobot {
-        private ExternalPatrolRobot(BotEntity entity) { super(entity); }
+        private ExternalPatrolRobot(BotHandle entity) { super(entity); }
     }
 
     private static final class ExternalFighterRobot extends ExternalRobot implements FighterRobot {
-        private ExternalFighterRobot(BotEntity entity) { super(entity); }
+        private ExternalFighterRobot(BotHandle entity) { super(entity); }
     }
 }

@@ -1,6 +1,8 @@
 package cn.mythicland.npclib.bot.v1_8_R3;
 
 import cn.mythicland.framework.task.StaggeredDeadline;
+import cn.mythicland.npclib.bot.BotHandle;
+import cn.mythicland.npclib.bot.BotVisibilitySettings;
 import net.minecraft.server.v1_8_R3.*;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -9,8 +11,9 @@ import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Player;
 
 import java.util.*;
+import java.util.function.Consumer;
 
-public class BotVisibility {
+public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
     private static final int PROFILE_REMOVE_DELAY_TICKS = 2;
     private static final int MAX_RELATIVE_MOVE_TICKS = 400;
     private static final int MAX_REVEALS_PER_TICK = 16;
@@ -19,15 +22,24 @@ public class BotVisibility {
     private final Map<UUID, Activity> activity = new HashMap<>();
     private final Map<UUID, EntityArmorStand> nameplates = new HashMap<>();
     private final Set<UUID> online = new HashSet<>();
+    private final Consumer<Player> idleHidden;
     private long currentTick;
     private long revealTick = Long.MIN_VALUE;
     private int reveals, revealCursor;
+
+    public BotVisibility() {
+        this(player -> { });
+    }
+
+    public BotVisibility(Consumer<Player> idleHidden) {
+        this.idleHidden = Objects.requireNonNull(idleHidden, "idleHidden");
+    }
 
     private static double angle(double degrees) {
         return ((degrees + 180) % 360 + 360) % 360 - 180;
     }
 
-    protected final boolean hasNameplate(UUID bot) {
+    public final boolean hasNameplate(UUID bot) {
         return nameplates.containsKey(bot);
     }
 
@@ -70,6 +82,23 @@ public class BotVisibility {
         activity.keySet().retainAll(online);
         viewers.keySet().retainAll(online);
     }
+
+    public void updateBot(
+            BotHandle bot,
+            Collection<? extends Player> players,
+            long tick,
+            UUID opponent,
+            Set<UUID> combatViewers,
+            BotVisibilitySettings config,
+            String name,
+            boolean hasEquipment
+    ) {
+        update((BotEntity) bot, players, tick, opponent, combatViewers, config, name, hasEquipment);
+    }
+
+    public void actionBot(BotHandle bot, int action) { action((BotEntity) bot, action); }
+
+    public void destroyBot(BotHandle bot) { destroy((BotEntity) bot); }
 
     public void update(
             EntityPlayer bot,
@@ -235,6 +264,7 @@ public class BotVisibility {
     }
 
     protected void onIdleHidden(Player player) {
+        this.idleHidden.accept(player);
     }
 
     public void restoreIdle(Player player, long tick, long idleTicks) {

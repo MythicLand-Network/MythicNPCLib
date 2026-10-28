@@ -108,7 +108,7 @@ class BotManagerTest {
             options.get(1).deathHandler().accept(battle.entity(), null);
             assertEquals(1, deaths.get());
             verify(battle.entity()).destroy();
-            BotEntity old = respawning.entity();
+            BotEntity old = (BotEntity) respawning.entity();
             options.get(2).deathHandler().accept(old, null);
             assertEquals(1, configuredDeaths.get());
             tick.getValue().run();
@@ -116,7 +116,7 @@ class BotManagerTest {
             tick.getValue().run();
             assertNotSame(old, respawning.entity());
             verify(old).destroy();
-            BotEntity replacement = respawning.entity();
+            BotEntity replacement = (BotEntity) respawning.entity();
             options.get(3).deathHandler().accept(replacement, null);
             respawning.close();
             verify(replacement).destroy();
@@ -133,6 +133,10 @@ class BotManagerTest {
 
     private static BotEntity entity(World world, Location location) {
         BotEntity entity = mock(BotEntity.class);
+        doCallRealMethod().when(entity).yaw(anyFloat());
+        doCallRealMethod().when(entity).pitch(anyFloat());
+        when(entity.yaw()).thenCallRealMethod();
+        when(entity.pitch()).thenCallRealMethod();
         CraftPlayer player = mock(CraftPlayer.class);
         UUID id = UUID.randomUUID();
         when(entity.getUniqueID()).thenReturn(id);

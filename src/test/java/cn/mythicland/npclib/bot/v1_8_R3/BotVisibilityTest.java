@@ -1,5 +1,7 @@
 package cn.mythicland.npclib.bot.v1_8_R3;
 
+import cn.mythicland.npclib.bot.BotVisibilitySettings;
+
 import com.mojang.authlib.GameProfile;
 import io.netty.buffer.Unpooled;
 import net.minecraft.server.v1_8_R3.*;

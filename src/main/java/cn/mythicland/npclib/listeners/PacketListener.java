@@ -22,6 +22,7 @@ import org.bukkit.plugin.Plugin;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.logging.Level;
 
 /**
  * @author Jitse Boonstra
@@ -40,10 +41,12 @@ public class PacketListener {
     // Prevent players from clicking at very high speeds.
     private final ConcurrentMap<UUID, Boolean> delay = new ConcurrentHashMap<>();
 
+    private volatile NPCLib instance;
     private Plugin plugin;
     private AsyncListenerHandler asyncListenerHandler;
 
     public void start(NPCLib instance) {
+        this.instance = instance;
         this.plugin = instance.getPlugin();
         this.asyncListenerHandler = ProtocolLibrary.getProtocolManager().getAsynchronousManager()
                 .registerAsyncHandler(
@@ -59,14 +62,20 @@ public class PacketListener {
     }
 
     public void stop() {
+        this.instance = null;
         this.delay.clear();
         if (this.asyncListenerHandler == null) return;
         try {
             ProtocolLibrary.getProtocolManager().getAsynchronousManager().unregisterAsyncHandler(
                     this.asyncListenerHandler.getAsyncListener()
             );
+        } catch (RuntimeException exception) {
+            this.plugin.getLogger().log(Level.WARNING, "Unable to unregister NPC packet listener", exception);
+        }
+        try {
             this.asyncListenerHandler.stop();
-        } catch (Exception ignored) {
+        } catch (RuntimeException exception) {
+            this.plugin.getLogger().log(Level.WARNING, "Unable to stop NPC packet listener", exception);
         } finally {
             this.asyncListenerHandler = null;
             this.plugin = null;
@@ -76,6 +85,8 @@ public class PacketListener {
     private void handleInteractPacket(Player player, Object packet) {
         int packetEntityId = entityIdField.get(packet);
         NPCBase npc = NPCManager.getByEntityId(packetEntityId);
+        NPCLib owner = this.instance;
+        if (owner == null || npc == null || npc.getInstance() != owner) return;
 
         // Not using streams here is an intentional choice.
         // Packet listeners is one of the few places where it is important to write
@@ -85,7 +96,7 @@ public class PacketListener {
         // So, we're avoiding them here.
         // ~ Kneesnap, 9 / 20 / 2019.
 
-        if (npc == null || !npc.isCreated() || !npc.isShown(player)) {
+        if (!npc.isCreated() || !npc.isShown(player)) {
             // Default player, not doing magic with the packet.
             return;
         }
@@ -99,14 +110,16 @@ public class PacketListener {
                 : NPCInteractEvent.ClickType.RIGHT_CLICK;
 
         Bukkit.getScheduler().runTask(
-                plugin,
-                () -> this.callNpcInteractEvent(new NPCInteractEvent(player, clickType, npc))
+                owner.getPlugin(),
+                () -> this.callNpcInteractEvent(owner, new NPCInteractEvent(player, clickType, npc))
         );
     }
 
-    private void callNpcInteractEvent(NPCInteractEvent eventToCall) {
+    private void callNpcInteractEvent(NPCLib owner, NPCInteractEvent eventToCall) {
         Player player = eventToCall.getWhoClicked();
         this.delay.remove(player.getUniqueId());
+        NPCBase npc = (NPCBase) eventToCall.getNPC();
+        if (this.instance != owner || !npc.isCreated() || !npc.isShown(player)) return;
         if (!player.getWorld().equals(eventToCall.getNPC().getWorld())) return;
 
         Location playerLocation = new Location(

@@ -1,7 +1,6 @@
 package cn.mythicland.npclib.bot;
 
 import cn.mythicland.npclib.api.skin.Skin;
-import cn.mythicland.npclib.bot.v1_8_R3.BotEntity;
 import org.bukkit.entity.Player;
 
 import java.util.Objects;
@@ -15,7 +14,7 @@ public final class FighterRobotOptions {
     private Predicate<Player> targets = player -> true;
     private int respawnDelay = -1;
     private Runnable deathHandler;
-    private BotEntity.Options externalControl;
+    private BotOptions externalControl;
 
     public void name(String name) { this.name = Objects.requireNonNull(name, "name"); }
     public void skin(Skin skin) { this.skin = skin; }
@@ -42,9 +41,9 @@ public final class FighterRobotOptions {
      * Uses the supplied entity settings and transfers movement, visibility, death and cleanup to the caller.
      * The default combat settings and library-managed lifecycle do not apply.
      */
-    public void externalControl(BotEntity.Options options) { this.externalControl = Objects.requireNonNull(options); }
+    public void externalControl(BotOptions options) { this.externalControl = Objects.requireNonNull(options); }
 
-    public BotEntity.Options externalControl() { return this.externalControl; }
+    public BotOptions externalControl() { return this.externalControl; }
 
     /**
      * Enables respawning after the given number of server ticks.

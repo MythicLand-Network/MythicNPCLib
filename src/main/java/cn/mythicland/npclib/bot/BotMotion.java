@@ -1,7 +1,6 @@
 package cn.mythicland.npclib.bot;
 
 import cn.mythicland.framework.math.Angles;
-import cn.mythicland.npclib.bot.v1_8_R3.BotEntity;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
@@ -38,9 +37,32 @@ public final class BotMotion {
         this.nextStrafe = tick + random(20, 40);
     }
 
+    public <T extends Settings & BotNavigator.Settings> void navigateAndMove(
+            T config,
+            BotNavigator navigator,
+            BotNavigator.Context context,
+            BotHandle entity,
+            Location location,
+            Location goal,
+            Player opponent,
+            long tick,
+            boolean descending,
+            boolean chase,
+            boolean returning,
+            boolean near,
+            boolean balanced
+    ) {
+        BotNavigator.Result result = navigator.navigate(config, location, goal, entity.getId(), tick,
+                descending, chase, returning, context);
+        if (!result.aborted()) {
+            move(config, entity, location, result.waypoint(), opponent, tick,
+                    descending, chase, near, result.direct(), balanced);
+        }
+    }
+
     public void move(
             Settings config,
-            BotEntity entity,
+            BotHandle entity,
             Location location,
             Location waypoint,
             Player opponent,
@@ -56,7 +78,7 @@ public final class BotMotion {
         if (chase) {
             aim = BotMovement.combatAim(player.getEyeLocation(), opponent.getEyeLocation());
         }
-        float desiredYaw = entity.yaw;
+        float desiredYaw = entity.yaw();
         float desiredPitch = 0;
         if (aim != null) {
             double dx = aim.getX() - location.getX(), dz = aim.getZ() - location.getZ();
@@ -74,11 +96,11 @@ public final class BotMotion {
         double yawSpeed = config.yawSpeed() * this.turnSpeed;
         double pitchSpeed = config.pitchSpeed() * this.turnSpeed;
         if (chase) {
-            entity.yaw = BotMovement.turnToTarget(entity.yaw, desiredYaw, yawSpeed);
-            entity.pitch = BotMovement.turnToTarget(entity.pitch, desiredPitch, pitchSpeed);
+            entity.yaw(BotMovement.turnToTarget(entity.yaw(), desiredYaw, yawSpeed));
+            entity.pitch(BotMovement.turnToTarget(entity.pitch(), desiredPitch, pitchSpeed));
         } else {
-            entity.yaw = Angles.turn(entity.yaw, desiredYaw, yawSpeed);
-            entity.pitch = Angles.turn(entity.pitch, desiredPitch, pitchSpeed);
+            entity.yaw(Angles.turn(entity.yaw(), desiredYaw, yawSpeed));
+            entity.pitch(Angles.turn(entity.pitch(), desiredPitch, pitchSpeed));
         }
         boolean moving = !descending && waypoint != null;
         Vector movement;
@@ -91,13 +113,13 @@ public final class BotMotion {
         if (remaining > 1e-6) {
             movement.multiply((balanced ? 1 : Math.min(1, remaining / .6)) / remaining);
         }
-        Vector input = BotMovement.inputs(entity.yaw, movement);
+        Vector input = BotMovement.inputs(entity.yaw(), movement);
         if (chase && input.getZ() < 0) {
             input.setZ(0);
             input.setX(Math.abs(input.getX()) > 0.01 ? Math.signum(input.getX()) : this.strafeDirection);
         }
         boolean jump = moving && !direct && waypoint.getY() > location.getY() + 0.6;
-        if (moving && chase && !near && entity.onGround && tick >= this.nextJump
+        if (moving && chase && !near && entity.onGround() && tick >= this.nextJump
                 && location.distanceSquared(opponent.getLocation()) <= 8 * 8
                 && movement.dot(opponent.getLocation().toVector().subtract(location.toVector()).setY(0)) > 0) {
             this.nextJump = tick + random(200, 400);

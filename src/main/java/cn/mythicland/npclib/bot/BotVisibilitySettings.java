@@ -1,4 +1,4 @@
-package cn.mythicland.npclib.bot.v1_8_R3;
+package cn.mythicland.npclib.bot;
 
 public interface BotVisibilitySettings {
     double viewDistance();

@@ -1,6 +1,5 @@
 package cn.mythicland.npclib.bot;
 
-import cn.mythicland.npclib.bot.v1_8_R3.BotEntity;
 import org.bukkit.entity.Player;
 
 import java.util.random.RandomGenerator;
@@ -23,7 +22,7 @@ public final class BotAttack {
     }
 
     public boolean attack(
-            BotEntity entity,
+            BotHandle entity,
             Player opponent,
             long tick,
             double distance,

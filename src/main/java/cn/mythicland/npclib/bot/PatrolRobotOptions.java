@@ -1,7 +1,6 @@
 package cn.mythicland.npclib.bot;
 
 import cn.mythicland.npclib.api.skin.Skin;
-import cn.mythicland.npclib.bot.v1_8_R3.BotEntity;
 import org.bukkit.Location;
 
 import java.util.List;
@@ -14,7 +13,7 @@ public final class PatrolRobotOptions {
     private List<Location> waypoints;
     private double movementSpeed = 1;
     private Runnable deathHandler;
-    private BotEntity.Options externalControl;
+    private BotOptions externalControl;
 
     public PatrolRobotOptions(Location location) {
         this.spawn = Objects.requireNonNull(location, "location");
@@ -43,9 +42,9 @@ public final class PatrolRobotOptions {
      * Uses the supplied entity settings and transfers movement, visibility, death and cleanup to the caller.
      * The default patrol settings and library-managed lifecycle do not apply.
      */
-    public void externalControl(BotEntity.Options options) { this.externalControl = Objects.requireNonNull(options); }
+    public void externalControl(BotOptions options) { this.externalControl = Objects.requireNonNull(options); }
 
-    public BotEntity.Options externalControl() { return this.externalControl; }
+    public BotOptions externalControl() { return this.externalControl; }
 
     public String name() { return this.name; }
     public Skin skin() { return this.skin; }

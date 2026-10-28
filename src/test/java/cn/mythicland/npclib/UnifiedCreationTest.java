@@ -2,17 +2,22 @@ package cn.mythicland.npclib;
 
 import cn.mythicland.npclib.api.PacketNpc;
 import cn.mythicland.npclib.api.skin.Skin;
+import cn.mythicland.npclib.bot.BotHandle;
+import cn.mythicland.npclib.bot.BotOptions;
 import cn.mythicland.npclib.bot.FighterRobot;
 import cn.mythicland.npclib.bot.PatrolRobot;
 import cn.mythicland.npclib.bot.v1_8_R3.BotEntity;
 import cn.mythicland.npclib.listeners.PacketListener;
 import cn.mythicland.npclib.internal.NPCManager;
 import cn.mythicland.npclib.nms.v1_8_R3.NPC_v1_8_R3;
+import net.minecraft.server.v1_8_R3.DamageSource;
+import net.minecraft.server.v1_8_R3.Entity;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import org.bukkit.craftbukkit.v1_8_R3.entity.CraftPlayer;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.Test;
@@ -23,6 +28,7 @@ import java.util.List;
 import java.util.Collection;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -37,11 +43,11 @@ class UnifiedCreationTest {
         Location location = new Location(mock(World.class), 1, 64, 2);
         BotEntity patrolEntity = mock(BotEntity.class);
         BotEntity fighterEntity = mock(BotEntity.class);
-        BotEntity.Options patrolOptions = new BotEntity.Options(
-                "patrol", "Patrol", null, true, (bot, source) -> { }, (bot, sound) -> sound.run()
+        BotOptions patrolOptions = new BotOptions(
+                "patrol", "Patrol", null, true, (bot, source, outOfWorld) -> { }, (bot, sound) -> sound.run()
         );
-        BotEntity.Options fighterOptions = new BotEntity.Options(
-                "fighter", "Fighter", null, false, (bot, source) -> { }, (bot, sound) -> sound.run()
+        BotOptions fighterOptions = new BotOptions(
+                "fighter", "Fighter", null, false, (bot, source, outOfWorld) -> { }, (bot, sound) -> sound.run()
         );
 
         try (var bukkit = mockStatic(Bukkit.class);
@@ -51,6 +57,8 @@ class UnifiedCreationTest {
             bukkit.when(Bukkit::getServer).thenReturn(server);
             entities.when(() -> BotEntity.create(location, patrolOptions)).thenReturn(patrolEntity);
             entities.when(() -> BotEntity.create(location, fighterOptions)).thenReturn(fighterEntity);
+            BotHandle independent = NPCLib.createExternalRobot(location, patrolOptions);
+            assertSame(patrolEntity, independent);
             NPCLib library = new NPCLib(plugin);
             PatrolRobot patrol = library.createPatrolRobot(location, options -> options.externalControl(patrolOptions));
             FighterRobot fighter = library.createFighterRobot(location, options -> options.externalControl(fighterOptions));
@@ -64,6 +72,41 @@ class UnifiedCreationTest {
             fighter.close();
             verify(patrolEntity).destroy();
             verify(fighterEntity).destroy();
+        }
+    }
+
+    @Test
+    void externalDeathReportsVoidWithoutExposingNativeDamageSource() {
+        Location location = new Location(mock(World.class), 1, 64, 2);
+        BotEntity bot = mock(BotEntity.class);
+        AtomicReference<BotEntity.Options> nativeOptions = new AtomicReference<>();
+        AtomicReference<Boolean> voidDeath = new AtomicReference<>();
+        AtomicReference<Player> attackerSeen = new AtomicReference<>();
+        BotOptions options = new BotOptions("bot", "Bot", null, false,
+                (entity, attacker, outOfWorld) -> {
+                    assertSame(bot, entity);
+                    attackerSeen.set(attacker);
+                    voidDeath.set(outOfWorld);
+                }, (entity, sound) -> sound.run());
+        try (var factory = mockStatic(BotEntity.class, CALLS_REAL_METHODS)) {
+            factory.when(() -> BotEntity.create(eq(location), any(BotEntity.Options.class)))
+                    .thenAnswer(call -> {
+                        nativeOptions.set(call.getArgument(1));
+                        return bot;
+                    });
+            assertSame(bot, NPCLib.createExternalRobot(location, options));
+            nativeOptions.get().deathHandler().accept(bot, DamageSource.OUT_OF_WORLD);
+            assertEquals(Boolean.TRUE, voidDeath.get());
+            nativeOptions.get().deathHandler().accept(bot, DamageSource.GENERIC);
+            assertEquals(Boolean.FALSE, voidDeath.get());
+            assertNull(attackerSeen.get());
+            Entity nativeAttacker = mock(Entity.class);
+            CraftPlayer attacker = mock(CraftPlayer.class);
+            DamageSource source = mock(DamageSource.class);
+            when(source.getEntity()).thenReturn(nativeAttacker);
+            when(nativeAttacker.getBukkitEntity()).thenReturn(attacker);
+            nativeOptions.get().deathHandler().accept(bot, source);
+            assertSame(attacker, attackerSeen.get());
         }
     }
 

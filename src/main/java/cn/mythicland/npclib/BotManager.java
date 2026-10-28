@@ -5,7 +5,7 @@ import cn.mythicland.npclib.api.skin.Skin;
 import cn.mythicland.npclib.bot.*;
 import cn.mythicland.npclib.bot.v1_8_R3.BotEntity;
 import cn.mythicland.npclib.bot.v1_8_R3.BotVisibility;
-import cn.mythicland.npclib.bot.v1_8_R3.BotVisibilitySettings;
+import cn.mythicland.npclib.bot.BotVisibilitySettings;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -385,12 +385,8 @@ final class BotManager implements Listener, AutoCloseable {
                     this.navigator.reset(BotManager.this.tick);
                 }
             }
-            BotNavigator.Result path = this.navigator.navigate(this.settings, location, goal, this.entity.getId(),
-                    BotManager.this.tick, false, chase, returning, this.navigationContext);
-            if (!path.aborted()) {
-                this.motion.move(this.settings, this.entity, location, path.waypoint(), opponent,
-                        BotManager.this.tick, false, chase, near, path.direct(), false);
-            }
+            this.motion.navigateAndMove(this.settings, this.navigator, this.navigationContext, this.entity,
+                    location, goal, opponent, BotManager.this.tick, false, chase, returning, near, false);
             if (opponent != null && BotManager.this.tick >= this.reactionUntil && valid(opponent)
                     && this.attack.attack(this.entity, opponent, BotManager.this.tick, 2.8, 30, 10, 16,
                     ThreadLocalRandom.current())) {
