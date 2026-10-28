@@ -1,3 +1,5 @@
+apply from: file('../MythicFramework/gradle/workspace-build-lock.gradle')
+
 rootProject.name = 'mythic-npclib'
 
 def frameworkDirectory = file('../MythicFramework')
