@@ -12,6 +12,9 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -104,6 +107,89 @@ public class MojangSkinServiceTest {
         } finally {
             server.stop(0);
             Files.deleteIfExists(cacheFile);
+        }
+    }
+
+    @Test
+    public void missingOfficialProfileStillUsesMineTools() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        server.createContext("/users/profiles/minecraft/TestPlayer", exchange -> respond(exchange, 404, ""));
+        server.createContext("/uuid/TestPlayer", exchange -> respond(exchange, 200, "{\"id\":\"" + UUID + "\"}"));
+        server.createContext("/profile/" + UUID, exchange -> respond(exchange, 200,
+                "{\"raw\":{\"properties\":[{\"value\":\"value\",\"signature\":\"signature\"}]}}"));
+        server.start();
+        String endpoint = "http://localhost:" + server.getAddress().getPort();
+        try {
+            MojangSkinService service = new MojangSkinService(null, endpoint, endpoint, endpoint);
+            assertEquals(Optional.of(new Skin("value", "signature")), service.fetchSkinByPlayerName("TestPlayer"));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    public void chineseNamesUseStoredSkinWithoutNetworkRequests() throws Exception {
+        List<String> requests = new CopyOnWriteArrayList<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        server.createContext("/", exchange -> {
+            requests.add(exchange.getRequestURI().getPath());
+            respond(exchange, 500, "");
+        });
+        server.start();
+        try {
+            String endpoint = "http://localhost:" + server.getAddress().getPort();
+            MojangSkinService service = new MojangSkinService(null, endpoint, endpoint, endpoint);
+            SkinCacheStore store = mock(SkinCacheStore.class);
+            Skin skin = new Skin("value", "signature");
+            when(store.load("中文玩家")).thenReturn(Optional.of(skin));
+            when(store.load("混合player")).thenReturn(Optional.empty());
+            service.setPersistentCache(store);
+            assertEquals(Optional.of(skin), service.fetchSkinByPlayerName("中文玩家"));
+            assertEquals(Optional.empty(), service.fetchSkinByPlayerName("混合Player"));
+            assertTrue(requests.isEmpty());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    public void timeoutUsesFallbackWithoutWarningAndReportsFailureWhenBothSourcesFail() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        server.createContext("/users/profiles/minecraft/TestPlayer", exchange -> {
+            try {
+                Thread.sleep(5500);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+            exchange.close();
+        });
+        server.createContext("/uuid/TestPlayer", exchange -> respond(exchange, 200, "{\"id\":\"" + UUID + "\"}"));
+        server.createContext("/profile/" + UUID, exchange -> respond(exchange, 200,
+                "{\"raw\":{\"properties\":[{\"value\":\"value\",\"signature\":\"signature\"}]}}"));
+        server.start();
+        List<LogRecord> records = new CopyOnWriteArrayList<>();
+        Logger logger = Logger.getLogger(MojangSkinService.class.getName());
+        Handler handler = new Handler() {
+            @Override public void publish(LogRecord record) { records.add(record); }
+            @Override public void flush() { }
+            @Override public void close() { }
+        };
+        logger.addHandler(handler);
+        try {
+            String endpoint = "http://localhost:" + server.getAddress().getPort();
+            MojangSkinService service = new MojangSkinService(null, endpoint, endpoint, endpoint);
+            assertEquals(Optional.of(new Skin("value", "signature")), service.fetchSkinByPlayerName("TestPlayer"));
+            assertTrue(records.isEmpty());
+            server.stop(0);
+            MojangSkinService unavailable = new MojangSkinService(null,
+                    "http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1");
+            assertEquals(Optional.empty(), unavailable.fetchSkinByPlayerName("TestPlayer"));
+            assertEquals(1, records.size());
+            assertTrue(records.get(0).getMessage().contains("Mojang profile"));
+            assertTrue(records.get(0).getMessage().contains("MineTools"));
+        } finally {
+            logger.removeHandler(handler);
+            server.stop(0);
         }
     }
 

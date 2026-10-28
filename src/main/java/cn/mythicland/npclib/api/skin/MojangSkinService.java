@@ -17,6 +17,8 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Map;
@@ -24,7 +26,6 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -106,8 +107,14 @@ public final class MojangSkinService {
                     return resolvedSkin;
                 }
             }
-            resolvedSkin = this.fetchOfficialSkin(normalizedPlayerName)
-                    .or(() -> this.fetchMineToolsSkin(normalizedPlayerName));
+            if (normalizedPlayerName.codePoints().anyMatch(codePoint ->
+                    Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN)) {
+                resolvedSkin = Optional.ofNullable(this.lastKnownSkins.get(key));
+                return resolvedSkin;
+            }
+            List<String> failures = new ArrayList<>();
+            resolvedSkin = this.fetchOfficialSkin(normalizedPlayerName, failures)
+                    .or(() -> this.fetchMineToolsSkin(normalizedPlayerName, failures));
             if (resolvedSkin.isPresent()) {
                 Skin skin = resolvedSkin.orElseThrow();
                 this.lastKnownSkins.put(key, skin);
@@ -120,6 +127,11 @@ public final class MojangSkinService {
             } else {
                 Skin lastKnownSkin = this.lastKnownSkins.get(key);
                 if (lastKnownSkin != null) resolvedSkin = Optional.of(lastKnownSkin);
+                if (!failures.isEmpty()) {
+                    Logger.getLogger(MojangSkinService.class.getName()).warning(
+                            "Unable to refresh skin for " + normalizedPlayerName + ": " + String.join("; ", failures)
+                    );
+                }
             }
             return resolvedSkin;
         } catch (RuntimeException | Error exception) {
@@ -135,12 +147,12 @@ public final class MojangSkinService {
         this.persistentCache = Objects.requireNonNull(store, "store");
     }
 
-    private Optional<Skin> fetchOfficialSkin(String playerName) {
-        Optional<String> uuid = this.fetchUuid(playerName);
-        return uuid.flatMap(this::fetchTexture);
+    private Optional<Skin> fetchOfficialSkin(String playerName, List<String> failures) {
+        Optional<String> uuid = this.fetchUuid(playerName, failures);
+        return uuid.flatMap(value -> this.fetchTexture(value, failures));
     }
 
-    private Optional<String> fetchUuid(String playerName) {
+    private Optional<String> fetchUuid(String playerName, List<String> failures) {
         try {
             String encodedName = URLEncoder.encode(playerName, StandardCharsets.UTF_8);
             String response = this.readText(
@@ -150,13 +162,12 @@ public final class MojangSkinService {
             if (!matcher.find()) return Optional.empty();
             return Optional.of(matcher.group(1));
         } catch (IOException exception) {
-            Logger.getLogger(MojangSkinService.class.getName())
-                    .log(Level.WARNING, "Unable to fetch skin data for " + playerName, exception);
+            failures.add("Mojang profile: " + exception);
             return Optional.empty();
         }
     }
 
-    private Optional<Skin> fetchTexture(String uuidWithoutDash) {
+    private Optional<Skin> fetchTexture(String uuidWithoutDash, List<String> failures) {
         try {
             String response = this.readText(
                     this.sessionServerRoot + "/session/minecraft/profile/"
@@ -164,13 +175,12 @@ public final class MojangSkinService {
             );
             return this.extractSkin(response, VALUE_PATTERN, SIGNATURE_PATTERN);
         } catch (IOException exception) {
-            Logger.getLogger(MojangSkinService.class.getName())
-                    .log(Level.WARNING, "Unable to fetch skin texture for " + uuidWithoutDash, exception);
+            failures.add("Mojang texture: " + exception);
             return Optional.empty();
         }
     }
 
-    private Optional<Skin> fetchMineToolsSkin(String playerName) {
+    private Optional<Skin> fetchMineToolsSkin(String playerName, List<String> failures) {
         try {
             String encodedName = URLEncoder.encode(playerName, StandardCharsets.UTF_8);
             String uuidResponse = this.readText(this.mineToolsApiRoot + "/uuid/" + encodedName);
@@ -186,8 +196,7 @@ public final class MojangSkinService {
                     MINE_TOOLS_SIGNATURE_PATTERN
             );
         } catch (IOException exception) {
-            Logger.getLogger(MojangSkinService.class.getName())
-                    .log(Level.WARNING, "Unable to fetch MineTools skin for " + playerName, exception);
+            failures.add("MineTools: " + exception);
             return Optional.empty();
         }
     }
@@ -211,19 +220,18 @@ public final class MojangSkinService {
         connection.setConnectTimeout(5000);
         connection.setReadTimeout(5000);
         connection.setUseCaches(false);
-        int responseCode = connection.getResponseCode();
-        if (responseCode < 200 || responseCode >= 300) {
-            connection.disconnect();
-            throw new IOException("HTTP " + responseCode);
-        }
-
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)
-        )) {
-            StringBuilder builder = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) builder.append(line);
-            return builder.toString();
+        try {
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_NOT_FOUND || responseCode == HttpURLConnection.HTTP_NO_CONTENT) return "";
+            if (responseCode < 200 || responseCode >= 300) throw new IOException("HTTP " + responseCode);
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)
+            )) {
+                StringBuilder builder = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) builder.append(line);
+                return builder.toString();
+            }
         } finally {
             connection.disconnect();
         }
