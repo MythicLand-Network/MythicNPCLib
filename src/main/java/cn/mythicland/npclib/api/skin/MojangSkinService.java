@@ -18,11 +18,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -106,7 +109,7 @@ public final class MojangSkinService {
             resolvedSkin = this.fetchOfficialSkin(normalizedPlayerName)
                     .or(() -> this.fetchMineToolsSkin(normalizedPlayerName));
             if (resolvedSkin.isPresent()) {
-                Skin skin = resolvedSkin.get();
+                Skin skin = resolvedSkin.orElseThrow();
                 this.lastKnownSkins.put(key, skin);
                 this.cache.put(
                         key,
@@ -119,6 +122,9 @@ public final class MojangSkinService {
                 if (lastKnownSkin != null) resolvedSkin = Optional.of(lastKnownSkin);
             }
             return resolvedSkin;
+        } catch (RuntimeException | Error exception) {
+            request.completeExceptionally(exception);
+            throw exception;
         } finally {
             request.complete(resolvedSkin);
             this.inFlightRequests.remove(key, request);
@@ -126,7 +132,7 @@ public final class MojangSkinService {
     }
 
     public void setPersistentCache(SkinCacheStore store) {
-        this.persistentCache = java.util.Objects.requireNonNull(store, "store");
+        this.persistentCache = Objects.requireNonNull(store, "store");
     }
 
     private Optional<Skin> fetchOfficialSkin(String playerName) {
@@ -143,7 +149,9 @@ public final class MojangSkinService {
             Matcher matcher = UUID_PATTERN.matcher(response);
             if (!matcher.find()) return Optional.empty();
             return Optional.of(matcher.group(1));
-        } catch (Exception exception) {
+        } catch (IOException exception) {
+            Logger.getLogger(MojangSkinService.class.getName())
+                    .log(Level.WARNING, "Unable to fetch skin data for " + playerName, exception);
             return Optional.empty();
         }
     }
@@ -155,7 +163,9 @@ public final class MojangSkinService {
                             + uuidWithoutDash + "?unsigned=false"
             );
             return this.extractSkin(response, VALUE_PATTERN, SIGNATURE_PATTERN);
-        } catch (Exception exception) {
+        } catch (IOException exception) {
+            Logger.getLogger(MojangSkinService.class.getName())
+                    .log(Level.WARNING, "Unable to fetch skin texture for " + uuidWithoutDash, exception);
             return Optional.empty();
         }
     }
@@ -175,7 +185,9 @@ public final class MojangSkinService {
                     MINE_TOOLS_VALUE_PATTERN,
                     MINE_TOOLS_SIGNATURE_PATTERN
             );
-        } catch (Exception exception) {
+        } catch (IOException exception) {
+            Logger.getLogger(MojangSkinService.class.getName())
+                    .log(Level.WARNING, "Unable to fetch MineTools skin for " + playerName, exception);
             return Optional.empty();
         }
     }
@@ -191,7 +203,7 @@ public final class MojangSkinService {
         return Optional.of(new Skin(valueMatcher.group(1), signatureMatcher.group(1)));
     }
 
-    private String readText(String address) throws Exception {
+    private String readText(String address) throws IOException {
         HttpURLConnection connection = (HttpURLConnection) URI.create(address)
                 .toURL()
                 .openConnection();

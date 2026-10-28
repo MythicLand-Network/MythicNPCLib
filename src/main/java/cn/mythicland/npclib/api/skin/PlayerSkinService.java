@@ -4,7 +4,6 @@
 
 package cn.mythicland.npclib.api.skin;
 
-import com.mojang.authlib.properties.Property;
 import org.bukkit.craftbukkit.v1_8_R3.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 
