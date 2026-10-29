@@ -70,7 +70,15 @@ class BotVisibilityTest {
                 EntityPlayer handle = mock(EntityPlayer.class);
                 when(handle.u()).thenReturn(handleWorld);
                 handle.playerConnection = mock(PlayerConnection.class);
-                when(viewer.getHandle()).thenReturn(handle);
+                when(viewer.getEyeHeight()).thenReturn(1.62);
+                when(viewer.getHandle()).thenAnswer(call -> {
+                    handle.locX = viewerEye.getX();
+                    handle.locY = viewerEye.getY() - viewer.getEyeHeight();
+                    handle.locZ = viewerEye.getZ();
+                    handle.yaw = viewerEye.getYaw();
+                    handle.pitch = viewerEye.getPitch();
+                    return handle;
+                });
                 List<Packet<?>> packets = new ArrayList<>();
                 doAnswer(call -> {
                     packets.add(call.getArgument(0));

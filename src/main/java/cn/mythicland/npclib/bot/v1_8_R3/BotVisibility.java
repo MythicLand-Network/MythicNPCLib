@@ -156,7 +156,11 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             if (!display.spawned && tick - display.revealedAt < config.spawnDelayTicks()) continue;
             if (!display.spawned && !fighting) {
                 Display pending = display;
-                double distance = player.getEyeLocation().distanceSquared(bot.getBukkitEntity().getLocation());
+                EntityPlayer handle = ((CraftPlayer) player).getHandle();
+                double dx = handle.locX - bot.locX;
+                double dy = handle.locY + player.getEyeHeight() - bot.locY;
+                double dz = handle.locZ - bot.locZ;
+                double distance = dx * dx + dy * dy + dz * dz;
                 viewer.pending.put(bot.getUniqueID(), new Reveal(bot.getUniqueID(), display, tick,
                         config.maxRevealsPerTick(), distance, () -> update.sync(player, viewer, pending)));
                 continue;
@@ -172,23 +176,28 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             reveals = 0;
         }
         List<Viewer> ordered = new ArrayList<>(viewers.values());
-        List<Deque<Reveal>> queues = new ArrayList<>();
+        List<Iterator<Reveal>> queues = new ArrayList<>(ordered.size());
         for (Viewer viewer : ordered) {
             if (viewer.revealTick != tick) {
                 viewer.revealTick = tick;
                 viewer.reveals = 0;
             }
+            if (viewer.pending.isEmpty()) {
+                queues.add(Collections.emptyIterator());
+                continue;
+            }
             List<Reveal> pending = new ArrayList<>(viewer.pending.values());
             pending.sort(Comparator.comparingLong((Reveal reveal) -> reveal.display.revealedAt)
                     .thenComparingDouble(Reveal::distance));
-            queues.add(new ArrayDeque<>(pending));
+            queues.add(pending.iterator());
             viewer.pending.clear();
         }
         int skipped = 0;
         while (reveals < MAX_REVEALS_PER_TICK && skipped < ordered.size()) {
             int index = Math.floorMod(revealCursor++, ordered.size());
             Viewer viewer = ordered.get(index);
-            Reveal reveal = queues.get(index).pollFirst();
+            Iterator<Reveal> queue = queues.get(index);
+            Reveal reveal = queue.hasNext() ? queue.next() : null;
             if (reveal == null || viewer.reveals >= reveal.maxPerTick) {
                 skipped++;
                 continue;
@@ -215,26 +224,26 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             return false;
         }
         if (!player.canSee(bot.getBukkitEntity())) return false;
-        Location eye = player.getEyeLocation();
-        double dx = bot.locX - eye.getX();
-        double dy = bot.locY + bot.getHeadHeight() - eye.getY();
-        double dz = bot.locZ - eye.getZ();
+        EntityPlayer viewer = ((CraftPlayer) player).getHandle();
+        double eyeY = viewer.locY + player.getEyeHeight();
+        double dx = bot.locX - viewer.locX;
+        double dy = bot.locY + bot.getHeadHeight() - eyeY;
+        double dz = bot.locZ - viewer.locZ;
         double distanceSquared = dx * dx + dy * dy + dz * dz;
         if (distanceSquared > config.viewDistance() * config.viewDistance()) return false;
-        EntityPlayer viewer = ((CraftPlayer) player).getHandle();
         if (!viewer.u().getPlayerChunkMap().a(
                 viewer, (int) Math.floor(bot.locX) >> 4, (int) Math.floor(bot.locZ) >> 4
         )) return false;
         if (fighting) return true;
         Activity current = activity.get(player.getUniqueId());
-        if (eye.getY() > config.maxViewerY()) return false;
+        if (eyeY > config.maxViewerY()) return false;
         if (current != null && tick - current.tick() >= config.idleSeconds() * 20L) {
             this.onIdleHidden(player);
             return false;
         }
         if (distanceSquared <= config.nearbyDistance() * config.nearbyDistance()) return true;
-        double yaw = Math.toRadians(eye.getYaw());
-        double pitch = Math.toRadians(eye.getPitch());
+        double yaw = Math.toRadians(viewer.yaw);
+        double pitch = Math.toRadians(viewer.pitch);
         double horizontal = Math.cos(pitch);
         double dot = (-Math.sin(yaw) * horizontal * dx - Math.sin(pitch) * dy
                 + Math.cos(yaw) * horizontal * dz) / Math.sqrt(distanceSquared);

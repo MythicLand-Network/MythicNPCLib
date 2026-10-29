@@ -91,13 +91,19 @@ public final class MojangSkinService {
         String key = normalizedPlayerName.toLowerCase(Locale.ROOT);
         CacheEntry cached = this.cache.get(key);
         long now = System.currentTimeMillis();
-        if (cached != null && cached.expiresAt() > now) return Optional.of(cached.skin());
+        if (cached != null && cached.expiresAt() > now) return Optional.ofNullable(cached.skin());
         CompletableFuture<Optional<Skin>> request = new CompletableFuture<>();
         CompletableFuture<Optional<Skin>> existingRequest = this.inFlightRequests.putIfAbsent(key, request);
         if (existingRequest != null) return existingRequest.join();
 
         Optional<Skin> resolvedSkin = Optional.empty();
         try {
+            cached = this.cache.get(key);
+            now = System.currentTimeMillis();
+            if (cached != null && cached.expiresAt() > now) {
+                resolvedSkin = Optional.ofNullable(cached.skin());
+                return resolvedSkin;
+            }
             if (cached == null && this.persistentCache != null) {
                 resolvedSkin = this.persistentCache.load(key);
                 if (resolvedSkin.isPresent()) {
@@ -127,6 +133,7 @@ public final class MojangSkinService {
             } else {
                 Skin lastKnownSkin = this.lastKnownSkins.get(key);
                 if (lastKnownSkin != null) resolvedSkin = Optional.of(lastKnownSkin);
+                this.cache.put(key, new CacheEntry(lastKnownSkin, Long.MAX_VALUE));
                 if (!failures.isEmpty()) {
                     Logger.getLogger(MojangSkinService.class.getName()).warning(
                             "Unable to refresh skin for " + normalizedPlayerName + ": " + String.join("; ", failures)

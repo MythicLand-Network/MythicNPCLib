@@ -153,6 +153,31 @@ public class MojangSkinServiceTest {
     }
 
     @Test
+    public void failedLookupIsNotRepeatedUntilServiceRestarts() throws Exception {
+        List<String> requests = new CopyOnWriteArrayList<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        server.createContext(
+                "/", exchange -> {
+                    requests.add(exchange.getRequestURI().getPath());
+                    respond(exchange, 503, "");
+                }
+        );
+        server.start();
+        try {
+            String endpoint = "http://localhost:" + server.getAddress().getPort();
+            MojangSkinService service = new MojangSkinService(null, endpoint, endpoint, endpoint);
+            assertEquals(Optional.empty(), service.fetchSkinByPlayerName("TestPlayer"));
+            assertEquals(Optional.empty(), service.fetchSkinByPlayerName("testplayer"));
+            assertEquals(2, requests.size());
+            MojangSkinService restarted = new MojangSkinService(null, endpoint, endpoint, endpoint);
+            assertEquals(Optional.empty(), restarted.fetchSkinByPlayerName("TestPlayer"));
+            assertEquals(4, requests.size());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     public void timeoutUsesFallbackWithoutWarningAndReportsFailureWhenBothSourcesFail() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
         server.createContext("/users/profiles/minecraft/TestPlayer", exchange -> {
