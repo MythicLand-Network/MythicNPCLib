@@ -8,6 +8,32 @@ import java.util.zip.ZipFile
 
 def spigotDirectory = new File(gradle.gradleUserHomeDir, 'caches/mythicland/spigot-1.8.8')
 ext.spigot188Jar = new File(spigotDirectory, 'spigot-1.8.8.jar')
+def spigot112Directory = new File(gradle.gradleUserHomeDir, 'caches/mythicland/spigot-1.12.2')
+ext.spigot112Jar = new File(spigot112Directory, 'spigot-1.12.2.jar')
+
+tasks.register('prepareSpigot112') {
+    dependsOn tasks.named('prepareSpigot188')
+    outputs.file(spigot112Jar)
+    outputs.upToDateWhen { isSpigotVersion(spigot112Jar, 'v1_12_R1') }
+    onlyIf { !isSpigotVersion(spigot112Jar, 'v1_12_R1') }
+    doLast {
+        spigot112Directory.mkdirs()
+        File localJar = new File(System.getProperty('user.home'), '.m2/repository/org/spigotmc/spigot/1.12.2-R0.1-SNAPSHOT/spigot-1.12.2-R0.1-SNAPSHOT.jar')
+        if (isSpigotVersion(localJar, 'v1_12_R1')) {
+            Files.copy(localJar.toPath(), spigot112Jar.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        } else {
+            File buildTools = new File(spigotDirectory, 'BuildTools.jar')
+            if (!isZip(buildTools)) {
+                download('https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar', buildTools)
+            }
+            boolean windows = System.getProperty('os.name').toLowerCase().contains('windows')
+            File javaExecutable = resolveJava8(windows, spigotDirectory)
+            if (javaExecutable == null) throw new GradleException('BuildTools requires Java 8 for Spigot 1.12.2')
+            runBuildTools(javaExecutable, buildTools, spigot112Directory, windows, '1.12.2')
+        }
+        if (!isSpigotVersion(spigot112Jar, 'v1_12_R1')) throw new GradleException('BuildTools did not produce a valid Spigot 1.12.2 jar')
+    }
+}
 
 tasks.register('prepareSpigot188') {
     outputs.file(spigot188Jar)
@@ -48,7 +74,7 @@ tasks.register('prepareSpigot188') {
                     throw new GradleException('BuildTools requires Java 8. Set JAVA8_HOME or provide a Java 8 runtime in the Spigot cache.')
                 }
 
-                runBuildTools(javaExecutable, buildTools, directory, windows)
+                runBuildTools(javaExecutable, buildTools, directory, windows, '1.8.8')
 
                 if (!jar.isFile() || !isSpigot188(jar)) {
                     throw new GradleException('BuildTools did not produce a valid Spigot 1.8.8 jar')
@@ -143,7 +169,7 @@ private int javaMajorVersion(File executable) {
     return match.group(1).toInteger() == 1 ? match.group(2).toInteger() : match.group(1).toInteger()
 }
 
-private void runBuildTools(File javaExecutable, File buildTools, File directory, boolean windows) {
+private void runBuildTools(File javaExecutable, File buildTools, File directory, boolean windows, String version) {
     List<String> command
     if (windows) {
         File bash = resolveWindowsBash()
@@ -152,7 +178,7 @@ private void runBuildTools(File javaExecutable, File buildTools, File directory,
                 '-jar',
                 shellQuote(buildTools.absolutePath),
                 '--rev',
-                '1.8.8',
+                version,
                 '--output-dir',
                 shellQuote(directory.absolutePath)
         ].join(' ')
@@ -163,7 +189,7 @@ private void runBuildTools(File javaExecutable, File buildTools, File directory,
                 '-jar',
                 buildTools.absolutePath,
                 '--rev',
-                '1.8.8',
+                version,
                 '--output-dir',
                 directory.absolutePath
         ]
@@ -200,10 +226,14 @@ private String shellQuote(String path) {
 }
 
 private boolean isSpigot188(File jar) {
+    return isSpigotVersion(jar, 'v1_8_R3')
+}
+
+private boolean isSpigotVersion(File jar, String version) {
     try {
         ZipFile zip = new ZipFile(jar)
         try {
-            return zip.getEntry('org/bukkit/craftbukkit/v1_8_R3/CraftServer.class') != null
+            return zip.getEntry("org/bukkit/craftbukkit/${version}/CraftServer.class") != null
         } finally {
             zip.close()
         }

@@ -20,6 +20,7 @@ import cn.mythicland.npclib.bot.v1_8_R3.BotEntity;
 import cn.mythicland.npclib.internal.NPCBase;
 import cn.mythicland.npclib.listeners.*;
 import cn.mythicland.npclib.nms.v1_8_R3.NPC_v1_8_R3;
+import cn.mythicland.npclib.nms.v1_12_R1.NPC_v1_12_R1;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.HandlerList;
@@ -114,7 +115,8 @@ public final class NPCLib {
      * Creates a packet NPC. Automatic visibility is disabled unless requested.
      */
     public PacketNpc createPacketNpc(Location location) {
-        return createPacketNpc(location, options -> { });
+        return createPacketNpc(location, options -> {
+        });
     }
 
     public PacketNpc createPacketNpc(Location location, Consumer<PacketNpcOptions> configure) {
@@ -123,10 +125,17 @@ public final class NPCLib {
         PacketNpcOptions options = new PacketNpcOptions();
         Objects.requireNonNull(configure, "configure").accept(options);
         NPC npc;
-        if (options.profession() == null) {
+        String serverPackage = this.plugin.getServer().getClass().getPackage().getName();
+        if (serverPackage.endsWith(".v1_12_R1")) {
+            if (options.profession() != null)
+                throw new UnsupportedOperationException("Villager NPCs are not supported on 1.12.2");
+            npc = new NPC_v1_12_R1(this, options.text());
+        } else if (serverPackage.endsWith(".v1_8_R3") && options.profession() == null) {
             npc = new NPC_v1_8_R3(this, options.text());
-        } else {
+        } else if (serverPackage.endsWith(".v1_8_R3")) {
             npc = NPC_v1_8_R3.villager(this, options.text(), options.profession());
+        } else {
+            throw new UnsupportedOperationException("Unsupported server version: " + serverPackage);
         }
         this.ownedNpcs.add(npc);
         try {
@@ -151,13 +160,16 @@ public final class NPCLib {
         return new cn.mythicland.npclib.bot.v1_8_R3.BotVisibility(idleHidden);
     }
 
-    /** Creates an entity whose visibility, behavior, and cleanup are owned by the caller. */
+    /**
+     * Creates an entity whose visibility, behavior, and cleanup are owned by the caller.
+     */
     public static BotHandle createExternalRobot(Location location, BotOptions options) {
         return BotEntity.create(location, options);
     }
 
     public PatrolRobot createPatrolRobot(Location location) {
-        return createPatrolRobot(location, options -> { });
+        return createPatrolRobot(location, options -> {
+        });
     }
 
     public PatrolRobot createPatrolRobot(Location location, Consumer<PatrolRobotOptions> configure) {
@@ -170,7 +182,8 @@ public final class NPCLib {
     }
 
     public FighterRobot createFighterRobot(Location location) {
-        return createFighterRobot(location, options -> { });
+        return createFighterRobot(location, options -> {
+        });
     }
 
     public FighterRobot createFighterRobot(Location location, Consumer<FighterRobotOptions> configure) {
@@ -182,7 +195,9 @@ public final class NPCLib {
         return bots().createFighterRobot(location, options);
     }
 
-    /** Registers automatically shown NPCs for a player who has joined the server. */
+    /**
+     * Registers automatically shown NPCs for a player who has joined the server.
+     */
     public void showAutomaticNpcs(Player player) {
         for (PacketNpc npc : List.copyOf(this.automaticNpcs)) {
             if (((NPCBase) npc).getShown().contains(player.getUniqueId())) continue;
@@ -194,7 +209,9 @@ public final class NPCLib {
         return !this.automaticNpcs.isEmpty();
     }
 
-    /** Removes a destroyed NPC from this instance's ownership lists. */
+    /**
+     * Removes a destroyed NPC from this instance's ownership lists.
+     */
     public void forgetNPC(NPC npc) {
         this.ownedNpcs.remove(npc);
         this.automaticNpcs.remove(npc);
@@ -238,19 +255,29 @@ public final class NPCLib {
     private abstract static class ExternalRobot implements AutoCloseable {
         private final BotHandle entity;
 
-        private ExternalRobot(BotHandle entity) { this.entity = entity; }
+        private ExternalRobot(BotHandle entity) {
+            this.entity = entity;
+        }
 
-        public BotHandle entity() { return this.entity; }
+        public BotHandle entity() {
+            return this.entity;
+        }
 
         @Override
-        public void close() { this.entity.destroy(); }
+        public void close() {
+            this.entity.destroy();
+        }
     }
 
     private static final class ExternalPatrolRobot extends ExternalRobot implements PatrolRobot {
-        private ExternalPatrolRobot(BotHandle entity) { super(entity); }
+        private ExternalPatrolRobot(BotHandle entity) {
+            super(entity);
+        }
     }
 
     private static final class ExternalFighterRobot extends ExternalRobot implements FighterRobot {
-        private ExternalFighterRobot(BotHandle entity) { super(entity); }
+        private ExternalFighterRobot(BotHandle entity) {
+            super(entity);
+        }
     }
 }

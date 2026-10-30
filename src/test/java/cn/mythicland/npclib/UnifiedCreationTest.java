@@ -16,6 +16,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Server;
 import org.bukkit.World;
+import org.bukkit.craftbukkit.v1_8_R3.CraftServer;
 import org.bukkit.entity.Player;
 import org.bukkit.craftbukkit.v1_8_R3.entity.CraftPlayer;
 import org.bukkit.plugin.PluginManager;
@@ -44,10 +45,12 @@ class UnifiedCreationTest {
         BotEntity patrolEntity = mock(BotEntity.class);
         BotEntity fighterEntity = mock(BotEntity.class);
         BotOptions patrolOptions = new BotOptions(
-                "patrol", "Patrol", null, true, (bot, source, outOfWorld) -> { }, (bot, sound) -> sound.run()
+                "patrol", "Patrol", null, true, (bot, source, outOfWorld) -> {
+        }, (bot, sound) -> sound.run()
         );
         BotOptions fighterOptions = new BotOptions(
-                "fighter", "Fighter", null, false, (bot, source, outOfWorld) -> { }, (bot, sound) -> sound.run()
+                "fighter", "Fighter", null, false, (bot, source, outOfWorld) -> {
+        }, (bot, sound) -> sound.run()
         );
 
         try (var bukkit = mockStatic(Bukkit.class);
@@ -61,7 +64,8 @@ class UnifiedCreationTest {
             assertSame(patrolEntity, independent);
             NPCLib library = new NPCLib(plugin);
             PatrolRobot patrol = library.createPatrolRobot(location, options -> options.externalControl(patrolOptions));
-            FighterRobot fighter = library.createFighterRobot(location, options -> options.externalControl(fighterOptions));
+            FighterRobot fighter =
+                    library.createFighterRobot(location, options -> options.externalControl(fighterOptions));
             assertSame(patrolEntity, patrol.entity());
             assertSame(fighterEntity, fighter.entity());
             assertTrue(managers.constructed().isEmpty());
@@ -113,7 +117,7 @@ class UnifiedCreationTest {
     @Test
     void createsAndDestroysRealPacketNpc() {
         JavaPlugin plugin = mock(JavaPlugin.class);
-        Server server = mock(TestServer.class);
+        Server server = mock(CraftServer.class);
         PluginManager plugins = mock(PluginManager.class);
         when(plugin.getServer()).thenReturn(server);
         when(server.getPluginManager()).thenReturn(plugins);
@@ -136,7 +140,7 @@ class UnifiedCreationTest {
     @Test
     void createsConfiguredPacketNpcAndRegistersAutomaticVisibility() {
         JavaPlugin plugin = mock(JavaPlugin.class);
-        Server server = mock(TestServer.class);
+        Server server = mock(CraftServer.class);
         PluginManager manager = mock(PluginManager.class);
         Player first = mock(Player.class), second = mock(Player.class);
         World world = mock(World.class);

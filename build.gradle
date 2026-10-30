@@ -30,6 +30,7 @@ dependencies {
     implementation 'it.unimi.dsi:fastutil:8.5.13'
     compileOnly 'cn.mythicland:mythic-framework-bukkit:1.0.0'
     compileOnly files(spigot188Jar)
+    compileOnly files(spigot112Jar)
     compileOnly 'net.dmulloy2:ProtocolLib:5.4.0'
 
     testImplementation platform('org.junit:junit-bom:5.10.2')
@@ -45,6 +46,7 @@ dependencies {
 
 tasks.named('compileJava') {
     dependsOn tasks.named('prepareSpigot188')
+    dependsOn tasks.named('prepareSpigot112')
 }
 
 tasks.named('compileTestJava') {

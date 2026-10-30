@@ -8,7 +8,6 @@ import cn.mythicland.npclib.internal.MinecraftVersion;
 import cn.mythicland.framework.bukkit.reflect.Reflection;
 import org.bukkit.Location;
 import org.bukkit.World;
-import org.bukkit.craftbukkit.v1_8_R3.CraftWorld;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Player;
 
@@ -25,7 +24,7 @@ public class Hologram {
     private static final Class<?> ENTITY_ARMOR_STAND_CLASS = Reflection.getMinecraftClass("EntityArmorStand");
     private static final Class<?> ENTITY_LIVING_CLASS = Reflection.getMinecraftClass("EntityLiving");
     private static final Class<?> ENTITY_CLASS = Reflection.getMinecraftClass("Entity");
-    private static final Class<?> CRAFT_WORLD_CLASS = CraftWorld.class;
+    private static final Class<?> CRAFT_WORLD_CLASS = Reflection.getCraftBukkitClass("CraftWorld");
     private static final Class<?> CRAFT_PLAYER_CLASS = Reflection.getCraftBukkitClass("entity.CraftPlayer");
 
     private static final Class<?> BUKKIT_ENTITY_ARMOR_STAND_CLASS = Reflection.getClass("org.bukkit.entity.ArmorStand");
