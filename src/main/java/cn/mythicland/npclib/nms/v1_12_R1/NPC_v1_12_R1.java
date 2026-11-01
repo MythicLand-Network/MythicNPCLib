@@ -23,13 +23,21 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * @author Jitse Boonstra
  */
 public class NPC_v1_12_R1 extends NPCBase {
+    private static final long PROFILE_REMOVE_DELAY_TICKS = 40L;
+    private final Set<UUID> profileViewers = new HashSet<>();
+    private final Map<UUID, Long> profileGenerations = new HashMap<>();
+    private long nextProfileGeneration;
 
     private PacketPlayOutNamedEntitySpawn packetPlayOutNamedEntitySpawn;
     private PacketPlayOutScoreboardTeam packetPlayOutScoreboardTeamRegister;
@@ -85,16 +93,25 @@ public class NPC_v1_12_R1 extends NPCBase {
     @Override
     public void sendShowPackets(Player player) {
         PlayerConnection playerConnection = ((CraftPlayer) player).getHandle().playerConnection;
+        UUID viewerId = player.getUniqueId();
+        long generation = ++this.nextProfileGeneration;
+        this.profileGenerations.put(viewerId, generation);
+        this.profileViewers.add(viewerId);
 
         if (hasTeamRegistered.add(player.getUniqueId()))
             playerConnection.sendPacket(packetPlayOutScoreboardTeamRegister);
         playerConnection.sendPacket(packetPlayOutPlayerInfoAdd);
         playerConnection.sendPacket(packetPlayOutNamedEntitySpawn);
         playerConnection.sendPacket(packetPlayOutEntityHeadRotation);
-        // Keep the NPC entity visible without retaining its fake player in the tab list.
-        playerConnection.sendPacket(packetPlayOutPlayerInfoRemove);
-
         getHologram(player).show(player);
+        Bukkit.getScheduler().runTaskLater(instance.getPlugin(), () -> {
+            if (!Long.valueOf(generation).equals(this.profileGenerations.get(viewerId))) return;
+            if (!player.isOnline()) {
+                removeProfileState(viewerId);
+                return;
+            }
+            removeProfile(player);
+        }, PROFILE_REMOVE_DELAY_TICKS);
     }
 
     @Override
@@ -127,7 +144,7 @@ public class NPC_v1_12_R1 extends NPCBase {
         PlayerConnection playerConnection = ((CraftPlayer) player).getHandle().playerConnection;
 
         playerConnection.sendPacket(packetPlayOutEntityDestroy);
-        playerConnection.sendPacket(packetPlayOutPlayerInfoRemove);
+        removeProfile(player);
 
         getHologram(player).hide(player);
     }
@@ -185,6 +202,30 @@ public class NPC_v1_12_R1 extends NPCBase {
     @Override
     public void onLogout(Player player) {
         super.onLogout(player);
+        removeProfileState(player.getUniqueId());
+    }
+
+    @Override
+    public void destroy() {
+        Set<UUID> viewers = new HashSet<>(this.profileViewers);
+        super.destroy();
+        for (UUID viewerId : viewers) {
+            Player viewer = Bukkit.getPlayer(viewerId);
+            if (viewer != null && viewer.isOnline()) removeProfile(viewer);
+        }
+        this.profileViewers.clear();
+        this.profileGenerations.clear();
+    }
+
+    private void removeProfile(Player player) {
+        if (!this.profileViewers.remove(player.getUniqueId())) return;
+        this.profileGenerations.remove(player.getUniqueId());
+        ((CraftPlayer) player).getHandle().playerConnection.sendPacket(packetPlayOutPlayerInfoRemove);
+    }
+
+    private void removeProfileState(UUID viewerId) {
+        this.profileViewers.remove(viewerId);
+        this.profileGenerations.remove(viewerId);
     }
 
     @Override

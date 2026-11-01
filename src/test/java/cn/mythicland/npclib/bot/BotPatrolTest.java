@@ -1,11 +1,10 @@
 package cn.mythicland.npclib.bot;
 
-import cn.mythicland.framework.path.CyclicPathCursor;
+import cn.mythicland.framework.navigation.CyclicPathCursor;
+import java.util.List;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;

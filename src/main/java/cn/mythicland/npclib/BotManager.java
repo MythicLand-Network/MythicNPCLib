@@ -1,23 +1,11 @@
 package cn.mythicland.npclib;
 
-import cn.mythicland.framework.path.CyclicPathCursor;
+import cn.mythicland.framework.navigation.CyclicPathCursor;
 import cn.mythicland.npclib.api.skin.Skin;
 import cn.mythicland.npclib.bot.*;
+import cn.mythicland.npclib.bot.BotVisibilitySettings;
 import cn.mythicland.npclib.bot.v1_8_R3.BotEntity;
 import cn.mythicland.npclib.bot.v1_8_R3.BotVisibility;
-import cn.mythicland.npclib.bot.BotVisibilitySettings;
-import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
-import org.bukkit.Location;
-import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.HandlerList;
-import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitTask;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +17,17 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.logging.Level;
+import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
+import org.bukkit.Location;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 /**
  * Owns and ticks independently created bots. All methods must be called on the server thread.

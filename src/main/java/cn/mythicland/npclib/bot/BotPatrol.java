@@ -1,14 +1,13 @@
 package cn.mythicland.npclib.bot;
 
-import cn.mythicland.framework.path.CyclicPathCursor;
-import cn.mythicland.framework.path.NavigationProgress;
-import cn.mythicland.framework.path.PathLoadBalancer;
+import cn.mythicland.framework.navigation.CyclicPathCursor;
+import cn.mythicland.framework.navigation.NavigationProgress;
+import cn.mythicland.framework.navigation.PathLoadBalancer;
 import cn.mythicland.framework.task.StaggeredDeadline;
-import org.bukkit.Location;
-import org.bukkit.World;
-
 import java.util.List;
 import java.util.function.Predicate;
+import org.bukkit.Location;
+import org.bukkit.World;
 
 public final class BotPatrol {
     public interface Waypoint {
