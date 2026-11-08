@@ -10,6 +10,9 @@ import org.bukkit.craftbukkit.v1_8_R3.CraftWorld;
 import java.util.function.BiConsumer;
 
 public final class BotCollision {
+    // Match Entity.setPosition's float dimensions before widening them to doubles.
+    private static final double HALF_WIDTH = 0.6F / 2.0F;
+    private static final double HEIGHT = 1.8F;
     private final BiConsumer<World, Block> obstacleHandler;
 
     public BotCollision(BiConsumer<World, Block> obstacleHandler) {
@@ -21,19 +24,20 @@ public final class BotCollision {
     }
 
     public boolean blocked(Location location) {
-        for (int x = (int) Math.floor(location.getX() - 0.3); x <= Math.floor(location.getX() + 0.3); x++) {
-            for (int z = (int) Math.floor(location.getZ() - 0.3); z <= Math.floor(location.getZ() + 0.3); z++) {
-                for (int y = location.getBlockY(); y <= Math.floor(location.getY() + 1.8); y++) {
+        AxisAlignedBB bounds = new AxisAlignedBB(
+                location.getX() - HALF_WIDTH, location.getY(), location.getZ() - HALF_WIDTH,
+                location.getX() + HALF_WIDTH, location.getY() + HEIGHT, location.getZ() + HALF_WIDTH
+        );
+        for (int x = (int) Math.floor(bounds.a); x <= Math.floor(Math.nextDown(bounds.d)); x++) {
+            for (int z = (int) Math.floor(bounds.c); z <= Math.floor(Math.nextDown(bounds.f)); z++) {
+                for (int y = (int) Math.floor(bounds.b); y <= Math.floor(Math.nextDown(bounds.e)); y++) {
                     if (!location.getWorld().isChunkLoaded(x >> 4, z >> 4)) return true;
                     Block block = location.getWorld().getBlockAt(x, y, z);
                     if (block.getType() != Material.AIR) this.obstacleHandler.accept(location.getWorld(), block);
                 }
             }
         }
-        return !((CraftWorld) location.getWorld()).getHandle().a(new AxisAlignedBB(
-                location.getX() - 0.3, location.getY(), location.getZ() - 0.3,
-                location.getX() + 0.3, location.getY() + 1.8, location.getZ() + 0.3
-        )).isEmpty();
+        return !((CraftWorld) location.getWorld()).getHandle().a(bounds).isEmpty();
     }
 
     public static Location standingLocation(Location location) {
