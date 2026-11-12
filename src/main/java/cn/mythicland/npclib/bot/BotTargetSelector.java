@@ -2,7 +2,6 @@ package cn.mythicland.npclib.bot;
 
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
-import org.bukkit.util.Vector;
 
 import java.util.*;
 import java.util.function.Predicate;
@@ -117,22 +116,28 @@ public class BotTargetSelector {
     public Location separate(BotMovement.Settings config, Player bot, Location goal) {
         Location location = bot.getLocation();
         Cell center = this.cell(location);
-        Vector offset = new Vector();
+        Location position = new Location(null, 0, 0, 0);
+        double offsetX = 0;
+        double offsetZ = 0;
         int checked = 0;
         neighbors:
         for (int x = -1; x <= 1; x++) {
             for (int z = -1; z <= 1; z++) {
-                for (Player other : this.at(center, x, z)) {
+                List<Player> neighborsInCell = this.at(center, x, z);
+                for (Player other : neighborsInCell) {
                     if (other.equals(bot)) continue;
-                    Location position = other.getLocation();
+                    other.getLocation(position);
                     double dx = location.getX() - position.getX(), dz = location.getZ() - position.getZ();
                     double distanceSquared = dx * dx + dz * dz;
                     if (distanceSquared >= 1.44 || Math.abs(location.getY() - position.getY()) > 2) continue;
                     if (distanceSquared < 0.0001) {
                         double angle = Math.floorMod(bot.getUniqueId().hashCode(), 360) * Math.PI / 180;
-                        offset.add(new Vector(Math.cos(angle), 0, Math.sin(angle)));
+                        offsetX += Math.cos(angle);
+                        offsetZ += Math.sin(angle);
                     } else {
-                        offset.add(new Vector(dx, 0, dz).multiply((1.2 - Math.sqrt(distanceSquared)) / distanceSquared));
+                        double scale = (1.2 - Math.sqrt(distanceSquared)) / distanceSquared;
+                        offsetX += dx * scale;
+                        offsetZ += dz * scale;
                     }
                     if (++checked >= 12) {
                         break neighbors;
@@ -141,10 +146,13 @@ public class BotTargetSelector {
             }
         }
         double maximumOffset = Math.hypot(location.getX() - goal.getX(), location.getZ() - goal.getZ()) > 2 ? .35 : .9;
-        if (offset.lengthSquared() > maximumOffset * maximumOffset) {
-            offset.normalize().multiply(maximumOffset);
+        double lengthSquared = offsetX * offsetX + offsetZ * offsetZ;
+        if (lengthSquared > maximumOffset * maximumOffset) {
+            double length = Math.sqrt(lengthSquared);
+            offsetX = offsetX / length * maximumOffset;
+            offsetZ = offsetZ / length * maximumOffset;
         }
-        Location separated = goal.clone().add(offset);
+        Location separated = goal.clone().add(offsetX, 0, offsetZ);
         return BotMovement.distanceSquared(config, separated) <= config.radius() * config.radius() ? separated : goal;
     }
 

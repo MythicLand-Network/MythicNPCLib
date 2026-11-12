@@ -49,7 +49,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         for (Viewer viewer : viewers.values()) {
             Display display = viewer.entities.get(bot);
             if (display != null) {
-                display.checkedAt = Long.MIN_VALUE / 2;
+                display.nextVisibilityCheck = Long.MIN_VALUE;
             }
         }
     }
@@ -110,7 +110,8 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             String name,
             boolean hasEquipment
     ) {
-        configure(bot.getUniqueID(), config);
+        UUID botId = bot.getUniqueID();
+        configure(botId, config);
         EntityArmorStand nameplate = null;
         if (name != null) {
             nameplate = nameplates.computeIfAbsent(bot.getUniqueID(), id -> {
@@ -128,30 +129,28 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         }
         Update update = new Update(bot, nameplate, tick, config, hasEquipment);
         for (Player player : players) {
-            Viewer viewer = viewers.computeIfAbsent(player.getUniqueId(), id -> new Viewer());
-            boolean fighting = player.getUniqueId().equals(opponent) || combatViewers.contains(player.getUniqueId());
-            Display display = viewer.entities.get(bot.getUniqueID());
+            UUID playerId = player.getUniqueId();
+            Viewer viewer = viewers.computeIfAbsent(playerId, id -> new Viewer());
+            boolean fighting = playerId.equals(opponent) || combatViewers.contains(playerId);
+            Display display = viewer.entities.get(botId);
             boolean shouldCheckVisibility = fighting || display == null || !display.spawned
-                    || tick - display.checkedAt >= config.visibilityCheckTicks();
-            boolean visible;
+                    || tick >= display.nextVisibilityCheck;
             if (shouldCheckVisibility) {
-                visible = visible(player, bot, tick, fighting, config);
-            } else {
-                visible = display.visible;
-            }
-            if (display != null && tick - display.checkedAt >= config.visibilityCheckTicks()) {
-                display.checkedAt = tick;
-                display.visible = visible;
-            }
-            if (!visible) {
-                if (display != null) {
-                    hide(player, bot, viewer);
+                int phaseOffset = playerId.hashCode() + bot.getId();
+                int interval = config.visibilityCheckTicks();
+                boolean checkSight = Math.floorMod(tick + phaseOffset, interval) == 0;
+                boolean clearSight = display != null && display.clearSight;
+                Visibility visibility = visibility(player, bot, tick, fighting, config, checkSight, clearSight);
+                if (visibility == Visibility.HIDDEN) {
+                    if (display != null) hide(player, bot, viewer);
+                    continue;
                 }
-                continue;
-            }
-            if (display == null) {
-                display = new Display(tick);
-                viewer.entities.put(bot.getUniqueID(), display);
+                if (display == null) {
+                    display = new Display(tick);
+                    viewer.entities.put(botId, display);
+                }
+                display.clearSight = visibility == Visibility.CLEAR_SIGHT;
+                display.nextVisibilityCheck = StaggeredDeadline.after(tick, phaseOffset, interval);
             }
             if (!display.spawned && tick - display.revealedAt < config.spawnDelayTicks()) continue;
             if (!display.spawned && !fighting) {
@@ -212,43 +211,46 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         }
     }
 
-    private boolean visible(
+    private Visibility visibility(
             Player player,
             EntityPlayer bot,
             long tick,
             boolean fighting,
-            BotVisibilitySettings config
+            BotVisibilitySettings config,
+            boolean checkSight,
+            boolean clearSight
     ) {
-        if (!player.getWorld().equals(bot.getBukkitEntity().getWorld())) return false;
+        if (!player.getWorld().equals(bot.getBukkitEntity().getWorld())) return Visibility.HIDDEN;
         if (!player.getWorld().isChunkLoaded((int) Math.floor(bot.locX) >> 4, (int) Math.floor(bot.locZ) >> 4)) {
-            return false;
+            return Visibility.HIDDEN;
         }
-        if (!player.canSee(bot.getBukkitEntity())) return false;
+        if (!player.canSee(bot.getBukkitEntity())) return Visibility.HIDDEN;
         EntityPlayer viewer = ((CraftPlayer) player).getHandle();
         double eyeY = viewer.locY + player.getEyeHeight();
         double dx = bot.locX - viewer.locX;
         double dy = bot.locY + bot.getHeadHeight() - eyeY;
         double dz = bot.locZ - viewer.locZ;
         double distanceSquared = dx * dx + dy * dy + dz * dz;
-        if (distanceSquared > config.viewDistance() * config.viewDistance()) return false;
+        if (distanceSquared > config.viewDistance() * config.viewDistance()) return Visibility.HIDDEN;
         if (!viewer.u().getPlayerChunkMap().a(
                 viewer, (int) Math.floor(bot.locX) >> 4, (int) Math.floor(bot.locZ) >> 4
-        )) return false;
-        if (fighting) return true;
+        )) return Visibility.HIDDEN;
+        if (fighting) return Visibility.VISIBLE;
         Activity current = activity.get(player.getUniqueId());
-        if (eyeY > config.maxViewerY()) return false;
+        if (eyeY > config.maxViewerY()) return Visibility.HIDDEN;
         if (current != null && tick - current.tick() >= config.idleSeconds() * 20L) {
             this.onIdleHidden(player);
-            return false;
+            return Visibility.HIDDEN;
         }
-        if (distanceSquared <= config.nearbyDistance() * config.nearbyDistance()) return true;
+        if (distanceSquared <= config.nearbyDistance() * config.nearbyDistance()) return Visibility.VISIBLE;
         double yaw = Math.toRadians(viewer.yaw);
         double pitch = Math.toRadians(viewer.pitch);
         double horizontal = Math.cos(pitch);
         double dot = (-Math.sin(yaw) * horizontal * dx - Math.sin(pitch) * dy
                 + Math.cos(yaw) * horizontal * dz) / Math.sqrt(distanceSquared);
-        if (dot < Math.cos(Math.toRadians(config.viewAngle()))) return false;
-        return player.hasLineOfSight(bot.getBukkitEntity());
+        if (dot < Math.cos(Math.toRadians(config.viewAngle()))) return Visibility.HIDDEN;
+        if (checkSight) clearSight = player.hasLineOfSight(bot.getBukkitEntity());
+        return clearSight ? Visibility.CLEAR_SIGHT : Visibility.HIDDEN;
     }
 
     public void equipment(Player player, EntityPlayer bot) {
@@ -354,10 +356,14 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         private int reveals;
     }
 
+    private enum Visibility {
+        HIDDEN, VISIBLE, CLEAR_SIGHT
+    }
+
     private static final class Display {
         private final long revealedAt;
-        private long checkedAt;
-        private boolean visible = true, spawned;
+        private long nextVisibilityCheck;
+        private boolean clearSight, spawned;
         private String team;
         private Movement location, nameplate;
         private long lastTeleportTick;
@@ -368,7 +374,6 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
 
         private Display(long tick) {
             revealedAt = tick;
-            checkedAt = tick;
         }
     }
 

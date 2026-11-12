@@ -49,4 +49,28 @@ class BotSpawnGroupTest {
         assertEquals("new", group.iterator().next().source());
         assertNull(group.iterator().next().respawn());
     }
+
+    @Test
+    void coldGroupAdmitsFirstWaveWithoutWaitingForAllProfiles() {
+        BotLifecycle lifecycle = new BotLifecycle();
+        lifecycle.start();
+        BotSpawnGroup<String, String, String> group = new BotSpawnGroup<>(lifecycle);
+        int target = 48;
+        CompletableFuture<String> slowSkin = new CompletableFuture<>();
+        AtomicInteger requests = new AtomicInteger();
+        for (int tick = 1; tick <= 3; tick++) {
+            group.prepare(tick, target, 0, false, () -> "profile", ignored -> {
+                if (requests.getAndIncrement() == 0) return slowSkin;
+                return CompletableFuture.completedFuture("skin");
+            }, error -> fail(error));
+            lifecycle.drain();
+            group.admitReady();
+            assertEquals(16 * tick, group.pendingCount());
+            assertEquals(16 * tick - 1, group.pending().stream().filter(BotSpawnGroup.Ticket::admitted).count());
+        }
+        slowSkin.complete("late skin");
+        lifecycle.drain();
+        group.admitReady();
+        assertTrue(group.iterator().next().admitted());
+    }
 }

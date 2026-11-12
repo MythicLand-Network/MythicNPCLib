@@ -4,6 +4,10 @@ import cn.mythicland.npclib.NPCLib;
 import cn.mythicland.npclib.api.events.NPCInteractEvent;
 import cn.mythicland.npclib.internal.NPCBase;
 import cn.mythicland.npclib.internal.NPCManager;
+import com.comphenix.protocol.ProtocolLibrary;
+import com.comphenix.protocol.ProtocolManager;
+import com.comphenix.protocol.events.ListenerOptions;
+import com.comphenix.protocol.events.PacketEvent;
 import net.minecraft.server.v1_8_R3.PacketPlayInUseEntity;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -14,6 +18,7 @@ import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitScheduler;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -42,32 +47,48 @@ class PacketListenerTest {
             location.setWorld(world);
             return location;
         });
-        NPCBase npc = mock(NPCBase.class);
-        when(npc.getEntityId()).thenReturn(123);
-        when(npc.getInstance()).thenReturn(owner);
-        when(npc.isCreated()).thenReturn(true);
-        when(npc.isShown(player)).thenReturn(true);
-        when(npc.getWorld()).thenReturn(world);
-        when(npc.getLocation()).thenReturn(new Location(world, 1, 0, 0));
         List<Runnable> tasks = new ArrayList<>();
         when(scheduler.runTask(eq(plugin), any(Runnable.class))).thenAnswer(call -> {
             tasks.add(call.getArgument(1));
             return null;
         });
-        try (var bukkit = mockStatic(Bukkit.class)) {
+        ProtocolManager protocol = mock(ProtocolManager.class);
+        try (var bukkit = mockStatic(Bukkit.class); var protocolLibrary = mockStatic(ProtocolLibrary.class)) {
             bukkit.when(Bukkit::getServer).thenReturn(server);
+            bukkit.when(Bukkit::getVersion).thenReturn("PandaSpigot (MC: 1.8.8)");
+            bukkit.when(Bukkit::getBukkitVersion).thenReturn("1.8.8-R0.1-SNAPSHOT");
             bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
             bukkit.when(Bukkit::getPluginManager).thenReturn(plugins);
+            NPCBase npc = mock(NPCBase.class);
+            when(npc.getEntityId()).thenReturn(123);
+            when(npc.getInstance()).thenReturn(owner);
+            when(npc.isCreated()).thenReturn(true);
+            when(npc.isShown(player)).thenReturn(true);
+            when(npc.getWorld()).thenReturn(world);
+            when(npc.getLocation()).thenReturn(new Location(world, 1, 0, 0));
             PacketListener first = new PacketListener(), second = new PacketListener();
-            set(first, "instance", owner);
+            protocolLibrary.when(ProtocolLibrary::getProtocolManager).thenReturn(protocol);
+            first.start(owner);
+            var registered = ArgumentCaptor.forClass(com.comphenix.protocol.events.PacketListener.class);
+            verify(protocol).addPacketListener(registered.capture());
+            verify(protocol, never()).getAsynchronousManager();
+            assertFalse(registered.getValue().getReceivingWhitelist().getOptions().contains(ListenerOptions.SYNC));
+            PacketEvent cancelled = mock(PacketEvent.class);
+            when(cancelled.isCancelled()).thenReturn(true);
+            registered.getValue().onPacketReceiving(cancelled);
+            assertTrue(tasks.isEmpty());
             set(second, "instance", other);
             PacketPlayInUseEntity packet = new PacketPlayInUseEntity();
-            set(packet, "a", 123);
             set(packet, "action", PacketPlayInUseEntity.EnumEntityUseAction.ATTACK);
             var receive = PacketListener.class.getDeclaredMethod("handleInteractPacket", Player.class, Object.class);
             receive.setAccessible(true);
             NPCManager.add(npc);
             try {
+                set(packet, "a", 122);
+                receive.invoke(first, player, packet);
+                assertTrue(tasks.isEmpty());
+
+                set(packet, "a", 123);
                 receive.invoke(first, player, packet);
                 receive.invoke(second, player, packet);
                 assertEquals(1, tasks.size());
@@ -77,6 +98,7 @@ class PacketListenerTest {
                 receive.invoke(first, player, packet);
                 assertEquals(1, tasks.size());
                 first.stop();
+                verify(protocol).removePacketListener(registered.getValue());
                 tasks.removeFirst().run();
                 verify(plugins, times(1)).callEvent(any(NPCInteractEvent.class));
             } finally {

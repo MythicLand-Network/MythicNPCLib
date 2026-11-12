@@ -16,6 +16,8 @@ import java.util.function.Supplier;
  * request completion callbacks may run asynchronously.
  */
 public final class BotSpawnGroup<P, S, R> {
+    private static final int PREPARATIONS_PER_TICK = 16;
+
     public record Respawn<R>(long tick, R state, long routeSlot) {
     }
 
@@ -104,13 +106,20 @@ public final class BotSpawnGroup<P, S, R> {
             Function<P, CompletableFuture<S>> request,
             Consumer<Throwable> failure
     ) {
-        while (!this.delayed.isEmpty() && this.delayed.peekFirst().tick() <= tick) {
+        int due = 0;
+        int prepared = 0;
+        while (due < PREPARATIONS_PER_TICK && !this.delayed.isEmpty() && this.delayed.peekFirst().tick() <= tick) {
+            due++;
             Respawn<R> respawn = this.delayed.removeFirst();
             if (preserveRespawn) {
                 this.prepareOne(source.get(), respawn, request, failure);
+                prepared++;
             }
         }
-        while (alive + pendingCount() < target) this.prepareOne(source.get(), null, request, failure);
+        while (prepared < PREPARATIONS_PER_TICK && alive + pendingCount() < target) {
+            this.prepareOne(source.get(), null, request, failure);
+            prepared++;
+        }
     }
 
     private void prepareOne(

@@ -28,45 +28,6 @@ public class BotEntity extends EntityPlayer implements BotHandle {
     private final BiConsumer<BotEntity, DamageSource> deathHandler;
     private final BiConsumer<BotEntity, Runnable> stepHandler;
 
-    public record Options(
-            String name,
-            String displayName,
-            Skin skin,
-            boolean walking,
-            BiConsumer<BotEntity, DamageSource> deathHandler,
-            BiConsumer<BotEntity, Runnable> stepHandler
-    ) {
-        public Options {
-            Objects.requireNonNull(name, "name");
-            Objects.requireNonNull(displayName, "displayName");
-            Objects.requireNonNull(deathHandler, "deathHandler");
-            Objects.requireNonNull(stepHandler, "stepHandler");
-        }
-    }
-
-    public static BotEntity create(Location location, BotOptions options) {
-        return create(location, new Options(options.name(), options.displayName(), options.skin(), options.walking(),
-                (bot, source) -> options.deathHandler().onDeath(bot,
-                        source.getEntity() != null && source.getEntity().getBukkitEntity() instanceof org.bukkit.entity.Player player
-                                ? player : null, source == DamageSource.OUT_OF_WORLD),
-                options.stepHandler()::accept));
-    }
-
-    public static BotEntity create(Location location, Options options) {
-        BotEntity entity = new BotEntity(location, profile(options.skin()), options);
-        entity.spawn();
-        return entity;
-    }
-
-    private static GameProfile profile(Skin skin) {
-        UUID id = UUID.randomUUID();
-        GameProfile profile = new GameProfile(id, "b" + id.toString().replace("-", "").substring(0, 15));
-        if (skin != null) {
-            profile.getProperties().put("textures", new Property("textures", skin.value(), skin.signature()));
-        }
-        return profile;
-    }
-
     private BotEntity(Location location, GameProfile profile, Options options) {
         super(
                 prepareServer(profile), ((CraftWorld) location.getWorld()).getHandle(),
@@ -93,12 +54,27 @@ public class BotEntity extends EntityPlayer implements BotHandle {
         this.getBukkitEntity().setDisplayName(options.displayName());
     }
 
-    protected final void spawn() {
-        if (!addUntracked()) {
-            throw new IllegalStateException("Cannot add bot entity at " + getBukkitEntity().getLocation());
+    public static BotEntity create(Location location, BotOptions options) {
+        return create(location, new Options(options.name(), options.displayName(), options.skin(), options.walking(),
+                (bot, source) -> options.deathHandler().onDeath(bot,
+                        source.getEntity() != null && source.getEntity().getBukkitEntity() instanceof org.bukkit.entity.Player player
+                                ? player : null, source == DamageSource.OUT_OF_WORLD),
+                options.stepHandler()::accept));
+    }
+
+    public static BotEntity create(Location location, Options options) {
+        BotEntity entity = new BotEntity(location, profile(options.skin()), options);
+        entity.spawn();
+        return entity;
+    }
+
+    private static GameProfile profile(Skin skin) {
+        UUID id = UUID.randomUUID();
+        GameProfile profile = new GameProfile(id, "b" + id.toString().replace("-", "").substring(0, 15));
+        if (skin != null) {
+            profile.getProperties().put("textures", new Property("textures", skin.value(), skin.signature()));
         }
-        world.players.remove(this);
-        ((WorldServer) world).getTracker().untrackEntity(this);
+        return profile;
     }
 
     private static Field field(Class<?> type, String name) {
@@ -156,6 +132,19 @@ public class BotEntity extends EntityPlayer implements BotHandle {
         }
     }
 
+    // PandaSpigot calls this hook when wrapping a bot in CraftPlayer.
+    public final boolean deferBukkitPermissionInitialization() {
+        return true;
+    }
+
+    protected final void spawn() {
+        if (!addUntracked()) {
+            throw new IllegalStateException("Cannot add bot entity at " + getBukkitEntity().getLocation());
+        }
+        world.players.remove(this);
+        ((WorldServer) world).getTracker().untrackEntity(this);
+    }
+
     private boolean addUntracked() {
         try {
             @SuppressWarnings("unchecked")
@@ -177,95 +166,6 @@ public class BotEntity extends EntityPlayer implements BotHandle {
             }
         } catch (ReflectiveOperationException failure) {
             throw new IllegalStateException("Cannot register untracked bot entity", failure);
-        }
-    }
-
-    static final class UntrackedWorldAccess implements IWorldAccess {
-        private final IWorldAccess delegate;
-        private final Entity bot;
-
-        UntrackedWorldAccess(IWorldAccess delegate, Entity bot) {
-            this.delegate = delegate;
-            this.bot = bot;
-        }
-
-        @Override
-        public void a(BlockPosition position) {
-            delegate.a(position);
-        }
-
-        @Override
-        public void b(BlockPosition position) {
-            delegate.b(position);
-        }
-
-        @Override
-        public void a(int x1, int y1, int z1, int x2, int y2, int z2) {
-            delegate.a(x1, y1, z1, x2, y2, z2);
-        }
-
-        @Override
-        public void a(String sound, double x, double y, double z, float volume, float pitch) {
-            delegate.a(sound, x, y, z, volume, pitch);
-        }
-
-        @Override
-        public void a(
-                EntityHuman player,
-                String sound,
-                double x,
-                double y,
-                double z,
-                float volume,
-                float pitch
-        ) {
-            delegate.a(player, sound, x, y, z, volume, pitch);
-        }
-
-        @Override
-        public void a(
-                int particle,
-                boolean longDistance,
-                double x,
-                double y,
-                double z,
-                double dx,
-                double dy,
-                double dz,
-                int... data
-        ) {
-            delegate.a(particle, longDistance, x, y, z, dx, dy, dz, data);
-        }
-
-        @Override
-        public void a(Entity entity) {
-            if (entity == bot) return;
-            delegate.a(entity);
-        }
-
-        @Override
-        public void b(Entity entity) {
-            delegate.b(entity);
-        }
-
-        @Override
-        public void a(String sound, BlockPosition position) {
-            delegate.a(sound, position);
-        }
-
-        @Override
-        public void a(int effect, BlockPosition position, int data) {
-            delegate.a(effect, position, data);
-        }
-
-        @Override
-        public void a(EntityHuman player, int effect, BlockPosition position, int data) {
-            delegate.a(player, effect, position, data);
-        }
-
-        @Override
-        public void b(int breaker, BlockPosition position, int stage) {
-            delegate.b(breaker, position, stage);
         }
     }
 
@@ -368,16 +268,55 @@ public class BotEntity extends EntityPlayer implements BotHandle {
         this.stepHandler.accept(this, () -> super.a(position, block));
     }
 
-    @Override public double x() { return this.locX; }
-    @Override public double y() { return this.locY; }
-    @Override public double z() { return this.locZ; }
-    @Override public float yaw() { return this.yaw; }
-    @Override public float pitch() { return this.pitch; }
-    @Override public void yaw(float yaw) { this.yaw = yaw; }
-    @Override public void pitch(float pitch) { this.pitch = pitch; }
-    @Override public boolean onGround() { return this.onGround; }
-    @Override public void collidable(boolean collidable) { this.collidesWithEntities = collidable; }
-    @Override public void clearArrows() { this.o(0); }
+    @Override
+    public double x() {
+        return this.locX;
+    }
+
+    @Override
+    public double y() {
+        return this.locY;
+    }
+
+    @Override
+    public double z() {
+        return this.locZ;
+    }
+
+    @Override
+    public float yaw() {
+        return this.yaw;
+    }
+
+    @Override
+    public float pitch() {
+        return this.pitch;
+    }
+
+    @Override
+    public void yaw(float yaw) {
+        this.yaw = yaw;
+    }
+
+    @Override
+    public void pitch(float pitch) {
+        this.pitch = pitch;
+    }
+
+    @Override
+    public boolean onGround() {
+        return this.onGround;
+    }
+
+    @Override
+    public void collidable(boolean collidable) {
+        this.collidesWithEntities = collidable;
+    }
+
+    @Override
+    public void clearArrows() {
+        this.o(0);
+    }
 
     public void transfer(Location location) {
         destroy();
@@ -396,5 +335,110 @@ public class BotEntity extends EntityPlayer implements BotHandle {
     public void destroy() {
         world.removeEntity(this);
         ((WorldServer) world).getTracker().untrackEntity(this);
+    }
+
+    public record Options(
+            String name,
+            String displayName,
+            Skin skin,
+            boolean walking,
+            BiConsumer<BotEntity, DamageSource> deathHandler,
+            BiConsumer<BotEntity, Runnable> stepHandler
+    ) {
+        public Options {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(displayName, "displayName");
+            Objects.requireNonNull(deathHandler, "deathHandler");
+            Objects.requireNonNull(stepHandler, "stepHandler");
+        }
+    }
+
+    static final class UntrackedWorldAccess implements IWorldAccess {
+        private final IWorldAccess delegate;
+        private final Entity bot;
+
+        UntrackedWorldAccess(IWorldAccess delegate, Entity bot) {
+            this.delegate = delegate;
+            this.bot = bot;
+        }
+
+        @Override
+        public void a(BlockPosition position) {
+            delegate.a(position);
+        }
+
+        @Override
+        public void b(BlockPosition position) {
+            delegate.b(position);
+        }
+
+        @Override
+        public void a(int x1, int y1, int z1, int x2, int y2, int z2) {
+            delegate.a(x1, y1, z1, x2, y2, z2);
+        }
+
+        @Override
+        public void a(String sound, double x, double y, double z, float volume, float pitch) {
+            delegate.a(sound, x, y, z, volume, pitch);
+        }
+
+        @Override
+        public void a(
+                EntityHuman player,
+                String sound,
+                double x,
+                double y,
+                double z,
+                float volume,
+                float pitch
+        ) {
+            delegate.a(player, sound, x, y, z, volume, pitch);
+        }
+
+        @Override
+        public void a(
+                int particle,
+                boolean longDistance,
+                double x,
+                double y,
+                double z,
+                double dx,
+                double dy,
+                double dz,
+                int... data
+        ) {
+            delegate.a(particle, longDistance, x, y, z, dx, dy, dz, data);
+        }
+
+        @Override
+        public void a(Entity entity) {
+            if (entity == bot) return;
+            delegate.a(entity);
+        }
+
+        @Override
+        public void b(Entity entity) {
+            delegate.b(entity);
+        }
+
+        @Override
+        public void a(String sound, BlockPosition position) {
+            delegate.a(sound, position);
+        }
+
+        @Override
+        public void a(int effect, BlockPosition position, int data) {
+            delegate.a(effect, position, data);
+        }
+
+        @Override
+        public void a(EntityHuman player, int effect, BlockPosition position, int data) {
+            delegate.a(player, effect, position, data);
+        }
+
+        @Override
+        public void b(int breaker, BlockPosition position, int stage) {
+            delegate.b(breaker, position, stage);
+        }
     }
 }

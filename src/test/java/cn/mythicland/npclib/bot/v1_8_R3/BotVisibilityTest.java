@@ -90,7 +90,7 @@ class BotVisibilityTest {
                 bukkit.when(() -> Bukkit.getPlayer(viewer.getUniqueId())).thenReturn(viewer);
             }
             BotVisibility visibility = spy(new BotVisibility());
-            BotVisibilitySettings settings = new Settings(32, 30, 128, 0, 70, 10, 2, 0, 5);
+            BotVisibilitySettings settings = new Settings(32, 30, 128, 0, 70, 1, 2, 0, 5);
             visibility.activity(viewers, 0);
             visibility.update(bot, viewers, 0, null, Set.of(), settings, null, false);
             visibility.flush(0);
@@ -270,7 +270,7 @@ class BotVisibilityTest {
             visibility.destroy(bot);
             visibility.clear();
 
-            settings = new Settings(32, 30, 128, 0, 70, 10, 16, 0, 5);
+            settings = new Settings(32, 30, 128, 0, 70, 1, 16, 0, 5);
             List<EntityPlayer> crowd = new ArrayList<>();
             for (int index = 0; index < 10; index++) {
                 EntityPlayer candidate = bot(world, 50 + index, 20 - index);
@@ -340,7 +340,7 @@ class BotVisibilityTest {
             }
             for (EntityPlayer candidate : crowd) visibility.destroy(candidate);
             visibility.clear();
-            settings = new Settings(32, 30, 128, 0, 70, 10, 1, 0, 5);
+            settings = new Settings(32, 30, 128, 0, 70, 1, 1, 0, 5);
             sent.forEach(List::clear);
             visibility.activity(viewers, 2010);
             for (EntityPlayer candidate : crowd)
@@ -370,7 +370,7 @@ class BotVisibilityTest {
                     .allMatch(viewer -> visibility.isVisible(viewer.getUniqueId(), botId)));
             visibility.destroy(bot);
             visibility.clear();
-            settings = new Settings(32, 30, 128, 0, 70, 10, 2, 0, 1);
+            settings = new Settings(32, 30, 128, 0, 70, 1, 2, 0, 1);
             ItemStack hand = new ItemStack(Items.DIAMOND_SWORD);
             hand.setTag(new NBTTagCompound());
             hand.getTag().setString("state", "initial");
@@ -421,6 +421,51 @@ class BotVisibilityTest {
             }
             visibility.destroy(bot);
             visibility.clear();
+        }
+    }
+
+    @Test
+    void spreadsBlockedAndPendingSightChecksAcrossTicks() {
+        World world = mock(World.class);
+        when(world.isChunkLoaded(anyInt(), anyInt())).thenReturn(true);
+        WorldServer handleWorld = mock(WorldServer.class);
+        PlayerChunkMap chunks = mock(PlayerChunkMap.class);
+        when(handleWorld.getPlayerChunkMap()).thenReturn(chunks);
+        when(chunks.a(any(EntityPlayer.class), anyInt(), anyInt())).thenReturn(true);
+        int[] rayChecks = {0};
+        boolean[] clearSight = {false};
+        List<Player> viewers = new ArrayList<>();
+        for (int index = 0; index < 41; index++) {
+            CraftPlayer viewer = mock(CraftPlayer.class);
+            when(viewer.getUniqueId()).thenReturn(new UUID(0, index));
+            when(viewer.getWorld()).thenReturn(world);
+            when(viewer.getEyeHeight()).thenReturn(1.62);
+            when(viewer.canSee(any())).thenReturn(true);
+            when(viewer.hasLineOfSight(any())).thenAnswer(call -> {
+                rayChecks[0]++;
+                return clearSight[0];
+            });
+            EntityPlayer handle = mock(EntityPlayer.class);
+            handle.locY = 64;
+            when(handle.u()).thenReturn(handleWorld);
+            when(viewer.getHandle()).thenReturn(handle);
+            viewers.add(viewer);
+        }
+        List<EntityPlayer> bots = new ArrayList<>();
+        for (int id = 1; id <= 20; id++) {
+            bots.add(bot(world, id, 24));
+        }
+        int interval = 10;
+        int expectedChecks = viewers.size() * bots.size() / interval;
+        BotVisibilitySettings settings = new Settings(32, 30, 128, 12, 70, interval, 16, 20, 5);
+        BotVisibility visibility = new BotVisibility();
+        for (int tick = 0; tick < 2 * interval; tick++) {
+            clearSight[0] = tick >= interval;
+            rayChecks[0] = 0;
+            for (EntityPlayer bot : bots) {
+                visibility.update(bot, viewers, tick, null, Set.of(), settings, null, false);
+            }
+            assertEquals(expectedChecks, rayChecks[0], "Each tick checks one cohort of viewer/bot pairs");
         }
     }
 
