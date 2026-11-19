@@ -106,6 +106,17 @@ public final class BotSpawnGroup<P, S, R> {
             Function<P, CompletableFuture<S>> request,
             Consumer<Throwable> failure
     ) {
+        int prepared = this.prepareRespawns(tick, preserveRespawn, source, request, failure);
+        this.prepareNew(target, alive, prepared, source, request, failure);
+    }
+
+    public int prepareRespawns(
+            long tick,
+            boolean preserveRespawn,
+            Supplier<P> source,
+            Function<P, CompletableFuture<S>> request,
+            Consumer<Throwable> failure
+    ) {
         int due = 0;
         int prepared = 0;
         while (due < PREPARATIONS_PER_TICK && !this.delayed.isEmpty() && this.delayed.peekFirst().tick() <= tick) {
@@ -116,7 +127,18 @@ public final class BotSpawnGroup<P, S, R> {
                 prepared++;
             }
         }
-        while (prepared < PREPARATIONS_PER_TICK && alive + pendingCount() < target) {
+        return prepared;
+    }
+
+    public void prepareNew(
+            int target,
+            int alive,
+            int prepared,
+            Supplier<P> source,
+            Function<P, CompletableFuture<S>> request,
+            Consumer<Throwable> failure
+    ) {
+        while (prepared < PREPARATIONS_PER_TICK && alive + this.pendingCount() < target) {
             this.prepareOne(source.get(), null, request, failure);
             prepared++;
         }
@@ -147,7 +169,15 @@ public final class BotSpawnGroup<P, S, R> {
     }
 
     public void admitReady() {
-        for (Ticket<P, S, R> ticket : this.pending) if (ticket.ready) ticket.admitted = true;
+        this.admitReady(false);
+    }
+
+    public void admitReady(boolean respawnsOnly) {
+        for (Ticket<P, S, R> ticket : this.pending) {
+            if (ticket.ready && (!respawnsOnly || ticket.respawn != null)) {
+                ticket.admitted = true;
+            }
+        }
     }
 
     public Iterator<Ticket<P, S, R>> iterator() {
