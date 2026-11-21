@@ -426,6 +426,7 @@ class BotVisibilityTest {
 
     @Test
     void spreadsBlockedAndPendingSightChecksAcrossTicks() {
+        DispenserRegistry.c();
         World world = mock(World.class);
         when(world.isChunkLoaded(anyInt(), anyInt())).thenReturn(true);
         WorldServer handleWorld = mock(WorldServer.class);
@@ -467,6 +468,7 @@ class BotVisibilityTest {
             }
             assertEquals(expectedChecks, rayChecks[0], "Each tick checks one cohort of viewer/bot pairs");
         }
+        verify(world, times(bots.size() * 2 * interval)).isChunkLoaded(anyInt(), anyInt());
     }
 
     private static EntityPlayer bot(World world, int entityId, double z) {

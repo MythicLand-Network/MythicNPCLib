@@ -6,6 +6,7 @@ import cn.mythicland.npclib.bot.BotVisibilitySettings;
 import net.minecraft.server.v1_8_R3.*;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.craftbukkit.v1_8_R3.entity.CraftPlayer;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Player;
@@ -140,7 +141,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
                 int interval = config.visibilityCheckTicks();
                 boolean checkSight = Math.floorMod(tick + phaseOffset, interval) == 0;
                 boolean clearSight = display != null && display.clearSight;
-                Visibility visibility = visibility(player, bot, tick, fighting, config, checkSight, clearSight);
+                Visibility visibility = this.visibility(player, update, fighting, checkSight, clearSight);
                 if (visibility == Visibility.HIDDEN) {
                     if (display != null) hide(player, bot, viewer);
                     continue;
@@ -213,18 +214,14 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
 
     private Visibility visibility(
             Player player,
-            EntityPlayer bot,
-            long tick,
+            Update update,
             boolean fighting,
-            BotVisibilitySettings config,
             boolean checkSight,
             boolean clearSight
     ) {
-        if (!player.getWorld().equals(bot.getBukkitEntity().getWorld())) return Visibility.HIDDEN;
-        if (!player.getWorld().isChunkLoaded((int) Math.floor(bot.locX) >> 4, (int) Math.floor(bot.locZ) >> 4)) {
-            return Visibility.HIDDEN;
-        }
-        if (!player.canSee(bot.getBukkitEntity())) return Visibility.HIDDEN;
+        if (!update.chunkLoaded || !Objects.equals(player.getWorld(), update.world)) return Visibility.HIDDEN;
+        EntityPlayer bot = update.bot;
+        BotVisibilitySettings config = update.config;
         EntityPlayer viewer = ((CraftPlayer) player).getHandle();
         double eyeY = viewer.locY + player.getEyeHeight();
         double dx = bot.locX - viewer.locX;
@@ -232,13 +229,12 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         double dz = bot.locZ - viewer.locZ;
         double distanceSquared = dx * dx + dy * dy + dz * dz;
         if (distanceSquared > config.viewDistance() * config.viewDistance()) return Visibility.HIDDEN;
-        if (!viewer.u().getPlayerChunkMap().a(
-                viewer, (int) Math.floor(bot.locX) >> 4, (int) Math.floor(bot.locZ) >> 4
-        )) return Visibility.HIDDEN;
+        if (!player.canSee(update.body)) return Visibility.HIDDEN;
+        if (!viewer.u().getPlayerChunkMap().a(viewer, update.chunkX, update.chunkZ)) return Visibility.HIDDEN;
         if (fighting) return Visibility.VISIBLE;
         Activity current = activity.get(player.getUniqueId());
         if (eyeY > config.maxViewerY()) return Visibility.HIDDEN;
-        if (current != null && tick - current.tick() >= config.idleSeconds() * 20L) {
+        if (current != null && update.tick - current.tick() >= config.idleSeconds() * 20L) {
             this.onIdleHidden(player);
             return Visibility.HIDDEN;
         }
@@ -249,8 +245,9 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         double dot = (-Math.sin(yaw) * horizontal * dx - Math.sin(pitch) * dy
                 + Math.cos(yaw) * horizontal * dz) / Math.sqrt(distanceSquared);
         if (dot < Math.cos(Math.toRadians(config.viewAngle()))) return Visibility.HIDDEN;
-        if (checkSight) clearSight = player.hasLineOfSight(bot.getBukkitEntity());
-        return clearSight ? Visibility.CLEAR_SIGHT : Visibility.HIDDEN;
+        if (checkSight) clearSight = player.hasLineOfSight(update.body);
+        if (clearSight) return Visibility.CLEAR_SIGHT;
+        return Visibility.HIDDEN;
     }
 
     public void equipment(Player player, EntityPlayer bot) {
@@ -449,6 +446,11 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
 
     private final class Update {
         private final EntityPlayer bot;
+        private final Player body;
+        private final World world;
+        private final int chunkX;
+        private final int chunkZ;
+        private final boolean chunkLoaded;
         private final EntityArmorStand nameplate;
         private final long tick;
         private final BotVisibilitySettings config;
@@ -468,6 +470,11 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
                 boolean hasEquipment
         ) {
             this.bot = bot;
+            this.body = bot.getBukkitEntity();
+            this.world = this.body.getWorld();
+            this.chunkX = Location.locToBlock(bot.locX) >> 4;
+            this.chunkZ = Location.locToBlock(bot.locZ) >> 4;
+            this.chunkLoaded = this.world.isChunkLoaded(this.chunkX, this.chunkZ);
             this.nameplate = nameplate;
             this.tick = tick;
             this.config = config;
