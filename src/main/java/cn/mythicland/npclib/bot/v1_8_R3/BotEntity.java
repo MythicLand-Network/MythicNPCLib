@@ -19,6 +19,7 @@ import java.util.UUID;
 import java.util.function.BiConsumer;
 
 public class BotEntity extends EntityPlayer implements BotHandle {
+    private boolean retired;
     private static final IChatBaseComponent TAB_NAME = new ChatComponentText("");
     private static final Field WORLD_ACCESSES = field(World.class, "u");
     private static final Field PLAYER_STATISTICS = field(PlayerList.class, "o");
@@ -198,7 +199,15 @@ public class BotEntity extends EntityPlayer implements BotHandle {
 
     @Override
     public boolean ad() {
-        return !dead;
+        return !this.retired && !this.dead;
+    }
+
+    @Override
+    public void retireForLateMelee() {
+        this.retired = true;
+        this.collidesWithEntities = false;
+        this.noDamageTicks = 0;
+        this.invulnerableTicks = 0;
     }
 
     @Override
@@ -333,8 +342,8 @@ public class BotEntity extends EntityPlayer implements BotHandle {
     }
 
     public void destroy() {
+        // WorldManager untracks the bot during world removal, including its viewer registrations.
         world.removeEntity(this);
-        ((WorldServer) world).getTracker().untrackEntity(this);
     }
 
     public record Options(

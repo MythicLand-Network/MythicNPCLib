@@ -12,6 +12,21 @@ import static org.mockito.Mockito.*;
 
 class BotEntityTest {
     @Test
+    void retiringABotClearsHurtFramesAndArrowCollisionButAllowsAddressedMelee() {
+        BotEntity entity = mock(BotEntity.class, CALLS_REAL_METHODS);
+        entity.noDamageTicks = 20;
+        entity.invulnerableTicks = 10;
+        entity.collidable(true);
+        assertTrue(entity.ad());
+        entity.retireForLateMelee();
+        assertTrue(entity.aD());
+        assertFalse(entity.ad());
+        assertFalse(entity.collidesWithEntities);
+        assertEquals(0, entity.noDamageTicks);
+        assertEquals(0, entity.invulnerableTicks);
+    }
+
+    @Test
     void repeatedBotSpawnsDoNotRetainStatisticsOrRemovePlayerStatistics() throws Exception {
         PlayerList players = mock(PlayerList.class);
         Map<UUID, ServerStatisticManager> cached = new HashMap<>();

@@ -39,7 +39,7 @@ class BotVisibilityTest {
             PlayerChunkMap chunks = mock(PlayerChunkMap.class);
             when(handleWorld.getPlayerChunkMap()).thenReturn(chunks);
             when(chunks.a(any(EntityPlayer.class), anyInt(), anyInt())).thenReturn(true);
-            EntityPlayer bot = mock(EntityPlayer.class);
+            BotEntity bot = mock(BotEntity.class);
             when(bot.getId()).thenReturn(42);
             bot.locY = 64;
             bot.locZ = 10;
@@ -68,6 +68,7 @@ class BotVisibilityTest {
                 when(viewer.getLocation()).thenAnswer(call -> viewerEye.clone());
                 when(viewer.getEyeLocation()).thenAnswer(call -> viewerEye.clone());
                 EntityPlayer handle = mock(EntityPlayer.class);
+                when(handle.h(bot)).thenCallRealMethod();
                 when(handle.u()).thenReturn(handleWorld);
                 handle.playerConnection = mock(PlayerConnection.class);
                 when(viewer.getEyeHeight()).thenReturn(1.62);
@@ -90,12 +91,42 @@ class BotVisibilityTest {
                 bukkit.when(() -> Bukkit.getPlayer(viewer.getUniqueId())).thenReturn(viewer);
             }
             BotVisibility visibility = spy(new BotVisibility());
+            BotVisibilitySettings delayed = new Settings(32, 30, 128, 12, 70, 10, 1, 12, 5);
+            bot.locZ = 3;
+            visibility.activity(viewers, 0);
+            visibility.update(bot, viewers, 0, null, Set.of(), delayed, null, false);
+            visibility.flush(0);
+            assertTrue(sent.stream().allMatch(List::isEmpty));
+            bot.locZ = 7;
+            visibility.revealNearby(bot, viewers, 0, delayed, null, false, 6);
+            assertTrue(sent.stream().allMatch(List::isEmpty));
+            bot.locZ = 3;
+            when(viewers.getLast().canSee(body)).thenReturn(false);
+            visibility.revealNearby(bot, List.of(viewers.getLast()), 0, delayed, null, false, 6);
+            assertTrue(sent.getLast().isEmpty());
+            when(viewers.getLast().canSee(body)).thenReturn(true);
+            visibility.revealNearby(bot, viewers, 1, delayed, null, false, 6);
+            for (int index = 0; index < viewers.size(); index++) {
+                assertEquals(1, visibility.spawnedAt(viewers.get(index).getUniqueId(), botId));
+                assertEquals(1,
+                        sent.get(index).stream().filter(PacketPlayOutNamedEntitySpawn.class::isInstance).count());
+            }
+            visibility.hideFrom(viewers.getFirst().getUniqueId(), bot);
+            assertTrue(sent.getFirst().stream().anyMatch(PacketPlayOutEntityDestroy.class::isInstance));
+            assertTrue(sent.getLast().stream().noneMatch(PacketPlayOutEntityDestroy.class::isInstance));
+            assertTrue(visibility.isVisible(viewers.getLast().getUniqueId(), botId));
+            visibility.destroy(bot);
+            visibility.clear();
+            sent.forEach(List::clear);
+            bot.locZ = 10;
             BotVisibilitySettings settings = new Settings(32, 30, 128, 0, 70, 1, 2, 0, 5);
             visibility.activity(viewers, 0);
             visibility.update(bot, viewers, 0, null, Set.of(), settings, null, false);
             visibility.flush(0);
             assertTrue(visibility.isVisible(viewers.getFirst().getUniqueId(), botId));
-            for (Class<?> packet : new Class<?>[]{PacketPlayOutEntityHeadRotation.class}) {
+            visibility.action(bot, 0);
+            for (Class<?> packet : new Class<?>[]{PacketPlayOutEntityHeadRotation.class,
+                    PacketPlayOutAnimation.class}) {
                 assertSame(sent.getFirst().stream()
                                 .filter(packet::isInstance)
                                 .findFirst()
@@ -198,6 +229,10 @@ class BotVisibilityTest {
             visibility.flush(11);
             assertTrue(visibility.isVisible(viewers.getFirst().getUniqueId(), botId));
             assertFalse(visibility.isVisible(viewers.getLast().getUniqueId(), botId));
+            sent.forEach(List::clear);
+            visibility.action(bot, 0);
+            assertInstanceOf(PacketPlayOutAnimation.class, sent.getFirst().getFirst());
+            assertTrue(sent.getLast().isEmpty());
             for (int index = 0; index < viewers.size(); index++) {
                 eyes.get(index).setYaw(0);
                 when(viewers.get(index).hasLineOfSight(body)).thenReturn(true);
@@ -330,7 +365,11 @@ class BotVisibilityTest {
             visibility.activity(viewers, 2001);
             for (EntityPlayer candidate : crowd)
                 visibility.update(candidate, viewers, 2001, null, Set.of(), settings, null, false);
+            assertTrue(
+                    crowd.stream().anyMatch(candidate -> visibility.hasPendingReveal(candidate.getUniqueID(), 2000)));
             visibility.flush(2001);
+            assertFalse(
+                    crowd.stream().anyMatch(candidate -> visibility.hasPendingReveal(candidate.getUniqueID(), 2000)));
             for (int index = 0; index < viewers.size(); index++) {
                 assertEquals(1, sent.get(index).stream()
                         .filter(PacketPlayOutNamedEntitySpawn.class::isInstance)

@@ -21,8 +21,19 @@ public interface BotVisibility {
             boolean hasEquipment
     );
     void flush(long tick);
+
+    void revealNearby(BotHandle bot, Collection<? extends Player> players, long tick, BotVisibilitySettings config,
+            String name, boolean hasEquipment, double radius);
+
+    long spawnedAt(UUID viewer, UUID bot);
+
+    void hideFrom(UUID viewer, BotHandle bot);
+
     boolean muteCombatSounds(UUID player, UUID bot, long tick);
     boolean isVisible(UUID player, UUID bot);
+
+    boolean hasPendingReveal(UUID bot, long eligibleByTick);
+
     void restoreIdle(Player player, long tick, long idleTicks);
     void actionBot(BotHandle bot, int action);
     void destroyBot(BotHandle bot);

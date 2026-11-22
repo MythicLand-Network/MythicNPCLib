@@ -19,6 +19,12 @@ public interface BotHandle {
     void pitch(float pitch);
     boolean onGround();
     void collidable(boolean collidable);
+
+    /**
+     * Keep the entity addressable by late attack packets without intercepting projectiles or pushing actors.
+     */
+    void retireForLateMelee();
+
     void clearArrows();
     void tickState();
     void step(float strafe, float forward, double speed, boolean jump);

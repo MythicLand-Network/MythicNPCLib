@@ -101,6 +101,19 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
 
     public void destroyBot(BotHandle bot) { destroy((BotEntity) bot); }
 
+    @Override
+    public void revealNearby(
+            BotHandle bot,
+            Collection<? extends Player> players,
+            long tick,
+            BotVisibilitySettings config,
+            String name,
+            boolean hasEquipment,
+            double radius
+    ) {
+        this.update((BotEntity) bot, players, tick, null, Set.of(), config, name, hasEquipment, radius);
+    }
+
     public void update(
             EntityPlayer bot,
             Collection<? extends Player> players,
@@ -110,6 +123,20 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             BotVisibilitySettings config,
             String name,
             boolean hasEquipment
+    ) {
+        this.update(bot, players, tick, opponent, combatViewers, config, name, hasEquipment, 0);
+    }
+
+    private void update(
+            EntityPlayer bot,
+            Collection<? extends Player> players,
+            long tick,
+            UUID opponent,
+            Set<UUID> combatViewers,
+            BotVisibilitySettings config,
+            String name,
+            boolean hasEquipment,
+            double immediateRadius
     ) {
         UUID botId = bot.getUniqueID();
         configure(botId, config);
@@ -129,7 +156,13 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             nameplate.setPosition(bot.locX, bot.locY + 1.8, bot.locZ);
         }
         Update update = new Update(bot, nameplate, tick, config, hasEquipment);
+        boolean immediate = immediateRadius > 0;
         for (Player player : players) {
+            if (immediate) {
+                if (!update.world.equals(player.getWorld())) continue;
+                EntityPlayer handle = ((CraftPlayer) player).getHandle();
+                if (handle.h(bot) > immediateRadius * immediateRadius) continue;
+            }
             UUID playerId = player.getUniqueId();
             Viewer viewer = viewers.computeIfAbsent(playerId, id -> new Viewer());
             boolean fighting = playerId.equals(opponent) || combatViewers.contains(playerId);
@@ -139,7 +172,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             if (shouldCheckVisibility) {
                 int phaseOffset = playerId.hashCode() + bot.getId();
                 int interval = config.visibilityCheckTicks();
-                boolean checkSight = Math.floorMod(tick + phaseOffset, interval) == 0;
+                boolean checkSight = immediate || Math.floorMod(tick + phaseOffset, interval) == 0;
                 boolean clearSight = display != null && display.clearSight;
                 Visibility visibility = this.visibility(player, update, fighting, checkSight, clearSight);
                 if (visibility == Visibility.HIDDEN) {
@@ -153,8 +186,8 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
                 display.clearSight = visibility == Visibility.CLEAR_SIGHT;
                 display.nextVisibilityCheck = StaggeredDeadline.after(tick, phaseOffset, interval);
             }
-            if (!display.spawned && tick - display.revealedAt < config.spawnDelayTicks()) continue;
-            if (!display.spawned && !fighting) {
+            if (!immediate && !display.spawned && tick - display.revealedAt < config.spawnDelayTicks()) continue;
+            if (!immediate && !display.spawned && !fighting) {
                 Display pending = display;
                 EntityPlayer handle = ((CraftPlayer) player).getHandle();
                 double dx = handle.locX - bot.locX;
@@ -271,8 +304,34 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         return display != null && display.spawned;
     }
 
+    @Override
+    public long spawnedAt(UUID player, UUID bot) {
+        Viewer viewer = this.viewers.get(player);
+        if (viewer == null) return -1;
+        Display display = viewer.entities.get(bot);
+        if (display == null || !display.spawned) return -1;
+        return display.spawnedAt;
+    }
+
+    @Override
+    public void hideFrom(UUID playerId, BotHandle bot) {
+        Viewer viewer = this.viewers.get(playerId);
+        if (viewer == null || !viewer.entities.containsKey(bot.getUniqueID())) return;
+        Player player = Bukkit.getPlayer(playerId);
+        if (player != null) this.hide(player, (BotEntity) bot, viewer);
+    }
+
     protected void onIdleHidden(Player player) {
         this.idleHidden.accept(player);
+    }
+
+    @Override
+    public boolean hasPendingReveal(UUID bot, long eligibleByTick) {
+        for (Viewer viewer : this.viewers.values()) {
+            Display display = viewer.entities.get(bot);
+            if (display != null && !display.spawned && display.revealedAt <= eligibleByTick) return true;
+        }
+        return false;
     }
 
     public void restoreIdle(Player player, long tick, long idleTicks) {
@@ -280,23 +339,27 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
     }
 
     public void action(EntityPlayer bot, int action) {
+        UUID botId = bot.getUniqueID();
+        PacketPlayOutAnimation animation = null;
         for (Map.Entry<UUID, Viewer> entry : viewers.entrySet()) {
+            Display display = entry.getValue().entities.get(botId);
+            if (display == null || !display.spawned) continue;
             Player player = Bukkit.getPlayer(entry.getKey());
-            if (player != null && isVisible(entry.getKey(), bot.getUniqueID())) {
-                send(player, new PacketPlayOutAnimation(bot, action));
-            }
+            if (player == null) continue;
+            if (animation == null) animation = new PacketPlayOutAnimation(bot, action);
+            send(player, animation);
         }
     }
 
     public void destroy(EntityPlayer bot) {
+        UUID botId = bot.getUniqueID();
         for (Map.Entry<UUID, Viewer> entry : viewers.entrySet()) {
+            if (!entry.getValue().entities.containsKey(botId)) continue;
             Player player = Bukkit.getPlayer(entry.getKey());
-            if (player != null && entry.getValue().entities.containsKey(bot.getUniqueID())) {
-                hide(player, bot, entry.getValue());
-            }
+            if (player != null) hide(player, bot, entry.getValue());
         }
-        nameplates.remove(bot.getUniqueID());
-        configurations.remove(bot.getUniqueID());
+        nameplates.remove(botId);
+        configurations.remove(botId);
     }
 
     private void hide(Player player, EntityPlayer bot, Viewer viewer) {
@@ -359,6 +422,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
 
     private static final class Display {
         private final long revealedAt;
+        private long spawnedAt;
         private long nextVisibilityCheck;
         private boolean clearSight, spawned;
         private String team;
@@ -501,6 +565,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
                     send(player, new PacketPlayOutSpawnEntityLiving(nameplate));
                 }
                 display.spawned = true;
+                display.spawnedAt = this.tick;
                 display.profileRemoveAt = tick + PROFILE_REMOVE_DELAY_TICKS;
                 display.location = movement;
                 display.nameplate = plateMovement;
