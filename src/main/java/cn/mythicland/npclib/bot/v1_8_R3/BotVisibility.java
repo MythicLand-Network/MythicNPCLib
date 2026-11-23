@@ -3,6 +3,10 @@ package cn.mythicland.npclib.bot.v1_8_R3;
 import cn.mythicland.framework.task.StaggeredDeadline;
 import cn.mythicland.npclib.bot.BotHandle;
 import cn.mythicland.npclib.bot.BotVisibilitySettings;
+import it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Object2ObjectLinkedOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import net.minecraft.server.v1_8_R3.*;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -18,11 +22,11 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
     private static final int PROFILE_REMOVE_DELAY_TICKS = 2;
     private static final int MAX_RELATIVE_MOVE_TICKS = 400;
     private static final int MAX_REVEALS_PER_TICK = 16;
-    private final Map<UUID, BotVisibilitySettings> configurations = new HashMap<>();
-    private final Map<UUID, Viewer> viewers = new LinkedHashMap<>();
-    private final Map<UUID, Activity> activity = new HashMap<>();
-    private final Map<UUID, EntityArmorStand> nameplates = new HashMap<>();
-    private final Set<UUID> online = new HashSet<>();
+    private final Map<UUID, BotVisibilitySettings> configurations = new Object2ObjectOpenHashMap<>();
+    private final Map<UUID, Viewer> viewers = new Object2ObjectLinkedOpenHashMap<>();
+    private final Map<UUID, Activity> activity = new Object2ObjectOpenHashMap<>();
+    private final Map<UUID, EntityArmorStand> nameplates = new Object2ObjectOpenHashMap<>();
+    private final Set<UUID> online = new ObjectOpenHashSet<>();
     private final Consumer<Player> idleHidden;
     private long currentTick;
     private long revealTick = Long.MIN_VALUE;
@@ -64,11 +68,13 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             Viewer viewer = viewers.get(id);
             if (viewer != null) {
                 viewer.pending.clear();
-                viewer.retiredTeams.entrySet().removeIf(entry -> {
-                    if (tick < entry.getValue()) return false;
+                var retired = viewer.retiredTeams.object2LongEntrySet().fastIterator();
+                while (retired.hasNext()) {
+                    var entry = retired.next();
+                    if (tick < entry.getLongValue()) continue;
                     send(player, new PacketPlayOutScoreboardTeam(new Scoreboard().createTeam(entry.getKey()), 1));
-                    return true;
-                });
+                    retired.remove();
+                }
             }
             Location location = player.getLocation();
             Activity previous = activity.get(id);
@@ -409,9 +415,9 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
     }
 
     private static final class Viewer {
-        private final Map<UUID, Display> entities = new HashMap<>();
-        private final Map<UUID, Reveal> pending = new HashMap<>();
-        private final Map<String, Long> retiredTeams = new HashMap<>();
+        private final Map<UUID, Display> entities = new Object2ObjectOpenHashMap<>();
+        private final Map<UUID, Reveal> pending = new Object2ObjectLinkedOpenHashMap<>();
+        private final Object2LongOpenHashMap<String> retiredTeams = new Object2LongOpenHashMap<>();
         private long revealTick;
         private int reveals;
     }
@@ -523,6 +529,12 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         private final PacketPlayOutEntityMetadata metadata;
         private PacketPlayOutEntityHeadRotation rotation;
         private PacketPlayOutEntityStatus hurt;
+        private PacketPlayOutPlayerInfo addProfile;
+        private PacketPlayOutPlayerInfo removeProfile;
+        private PacketPlayOutScoreboardTeam createTeam;
+        private PacketPlayOutNamedEntitySpawn spawn;
+        private PacketPlayOutSpawnEntityLiving spawnNameplate;
+        private String teamName;
         private ItemStack[] equipment;
         private PacketPlayOutEntityEquipment[] equipmentPackets;
 
@@ -552,17 +564,26 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         private void sync(Player player, Viewer viewer, Display display) {
             boolean initial = !display.spawned;
             if (!display.spawned) {
-                send(player, new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, bot));
-                display.team = "b" + bot.getUniqueID().toString().replace("-", "").substring(0, 15);
-                viewer.retiredTeams.remove(display.team);
-                Scoreboard scoreboard = new Scoreboard();
-                ScoreboardTeam team = scoreboard.createTeam(display.team);
-                team.setNameTagVisibility(ScoreboardTeamBase.EnumNameTagVisibility.NEVER);
-                scoreboard.addPlayerToTeam(bot.getProfile().getName(), display.team);
-                send(player, new PacketPlayOutScoreboardTeam(team, 0));
-                send(player, new PacketPlayOutNamedEntitySpawn(bot));
+                if (this.spawn == null) {
+                    this.addProfile = new PacketPlayOutPlayerInfo(
+                            PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, bot
+                    );
+                    this.teamName = "b" + bot.getUniqueID().toString().replace("-", "").substring(0, 15);
+                    Scoreboard scoreboard = new Scoreboard();
+                    ScoreboardTeam team = scoreboard.createTeam(this.teamName);
+                    team.setNameTagVisibility(ScoreboardTeamBase.EnumNameTagVisibility.NEVER);
+                    scoreboard.addPlayerToTeam(bot.getProfile().getName(), this.teamName);
+                    this.createTeam = new PacketPlayOutScoreboardTeam(team, 0);
+                    this.spawn = new PacketPlayOutNamedEntitySpawn(bot);
+                    if (nameplate != null) this.spawnNameplate = new PacketPlayOutSpawnEntityLiving(nameplate);
+                }
+                display.team = this.teamName;
+                viewer.retiredTeams.removeLong(display.team);
+                send(player, this.addProfile);
+                send(player, this.createTeam);
+                send(player, this.spawn);
                 if (nameplate != null) {
-                    send(player, new PacketPlayOutSpawnEntityLiving(nameplate));
+                    send(player, this.spawnNameplate);
                 }
                 display.spawned = true;
                 display.spawnedAt = this.tick;
@@ -583,8 +604,12 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
                 }
             }
             if (display.profileRemoveAt > 0 && tick >= display.profileRemoveAt) {
-                send(player,
-                        new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER, bot));
+                if (this.removeProfile == null) {
+                    this.removeProfile = new PacketPlayOutPlayerInfo(
+                            PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER, bot
+                    );
+                }
+                send(player, this.removeProfile);
                 display.profileRemoveAt = 0;
             }
             if (metadata != null && !initial) {

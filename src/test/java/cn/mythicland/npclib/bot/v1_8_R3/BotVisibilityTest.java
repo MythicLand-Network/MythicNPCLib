@@ -111,6 +111,15 @@ class BotVisibilityTest {
                 assertEquals(1,
                         sent.get(index).stream().filter(PacketPlayOutNamedEntitySpawn.class::isInstance).count());
             }
+            for (Class<?> packetType : List.of(
+                    PacketPlayOutPlayerInfo.class, PacketPlayOutScoreboardTeam.class, PacketPlayOutNamedEntitySpawn.class
+            )) {
+                assertSame(
+                        sent.getFirst().stream().filter(packetType::isInstance).findFirst().orElseThrow(),
+                        sent.getLast().stream().filter(packetType::isInstance).findFirst().orElseThrow(),
+                        "Initial viewers can share the same immutable spawn payload"
+                );
+            }
             visibility.hideFrom(viewers.getFirst().getUniqueId(), bot);
             assertTrue(sent.getFirst().stream().anyMatch(PacketPlayOutEntityDestroy.class::isInstance));
             assertTrue(sent.getLast().stream().noneMatch(PacketPlayOutEntityDestroy.class::isInstance));

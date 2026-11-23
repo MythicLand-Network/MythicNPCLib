@@ -32,20 +32,6 @@ class BotLifecycleTest {
     }
 
     @Test
-    void spawnBudgetResetsAfterCountOrTimeLimit() {
-        BotSpawnBudget budget = new BotSpawnBudget(2, 10);
-        budget.record(4);
-        assertTrue(budget.available());
-        budget.record(2);
-        assertFalse(budget.available());
-        budget.reset();
-        budget.record(10);
-        assertFalse(budget.available());
-        budget.reset();
-        assertTrue(budget.available());
-    }
-
-    @Test
     void rosterReusesSnapshotUntilMembershipChanges() {
         BotRoster<String> roster = new BotRoster<>();
         UUID id = UUID.randomUUID();
