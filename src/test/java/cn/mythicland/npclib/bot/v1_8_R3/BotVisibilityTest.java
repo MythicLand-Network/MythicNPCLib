@@ -97,6 +97,18 @@ class BotVisibilityTest {
             visibility.update(bot, viewers, 0, null, Set.of(), delayed, null, false);
             visibility.flush(0);
             assertTrue(sent.stream().allMatch(List::isEmpty));
+            assertTrue(visibility.hasPendingReveal(botId, 0));
+            visibility.activity(List.of(viewers.getFirst()), 0);
+            visibility.hideFrom(viewers.getFirst().getUniqueId(), bot);
+            assertFalse(visibility.hasPendingReveal(botId, 0));
+            visibility.activity(viewers, 0);
+            visibility.update(bot, viewers, 0, null, Set.of(), delayed, null, false);
+            Set<UUID> visibleAtDeath = new HashSet<>();
+            assertEquals(0, visibility.beginRemoval(bot, 0, 2, visibleAtDeath));
+            assertTrue(visibleAtDeath.isEmpty());
+            visibility.flush(0);
+            assertFalse(visibility.hasPendingReveal(botId, 0));
+            assertTrue(sent.stream().allMatch(List::isEmpty));
             bot.locZ = 7;
             visibility.revealNearby(bot, viewers, 0, delayed, null, false, 6);
             assertTrue(sent.stream().allMatch(List::isEmpty));
@@ -120,10 +132,16 @@ class BotVisibilityTest {
                         "Initial viewers can share the same immutable spawn payload"
                 );
             }
+            assertEquals(3, visibility.beginRemoval(bot, 1, 2, visibleAtDeath));
+            assertEquals(Set.of(viewers.getFirst().getUniqueId(), viewers.getLast().getUniqueId()), visibleAtDeath);
             visibility.hideFrom(viewers.getFirst().getUniqueId(), bot);
             assertTrue(sent.getFirst().stream().anyMatch(PacketPlayOutEntityDestroy.class::isInstance));
             assertTrue(sent.getLast().stream().noneMatch(PacketPlayOutEntityDestroy.class::isInstance));
             assertTrue(visibility.isVisible(viewers.getLast().getUniqueId(), botId));
+            visibleAtDeath.clear();
+            assertEquals(3, visibility.beginRemoval(bot, 3, 2, visibleAtDeath));
+            assertEquals(Set.of(viewers.getLast().getUniqueId()), visibleAtDeath);
+            assertFalse(visibility.isVisible(viewers.getLast().getUniqueId(), botId));
             visibility.destroy(bot);
             visibility.clear();
             sent.forEach(List::clear);

@@ -27,6 +27,12 @@ public interface BotVisibility {
 
     long spawnedAt(UUID viewer, UUID bot);
 
+    /**
+     * Collects online viewers who saw the entity and hides pending or old enough displays.
+     * Returns the tick when the last remaining display reaches its minimum age.
+     */
+    long beginRemoval(BotHandle bot, long tick, int minimumVisibleTicks, Set<UUID> visibleViewers);
+
     void hideFrom(UUID viewer, BotHandle bot);
 
     boolean muteCombatSounds(UUID player, UUID bot, long tick);
