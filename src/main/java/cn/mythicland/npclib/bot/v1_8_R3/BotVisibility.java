@@ -208,7 +208,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
                 int interval = config.visibilityCheckTicks();
                 boolean checkSight = immediate || Math.floorMod(tick + phaseOffset, interval) == 0;
                 boolean clearSight = display != null && display.clearSight;
-                Visibility visibility = this.visibility(player, update, fighting, checkSight, clearSight);
+                Visibility visibility = this.visibility(player, viewer, update, fighting, checkSight, clearSight);
                 if (visibility == Visibility.HIDDEN) {
                     if (display != null) this.hide(player, bot, audience, display);
                     continue;
@@ -291,6 +291,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
 
     private Visibility visibility(
             Player player,
+            Viewer viewerState,
             Update update,
             boolean fighting,
             boolean checkSight,
@@ -316,12 +317,8 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             return Visibility.HIDDEN;
         }
         if (distanceSquared <= config.nearbyDistance() * config.nearbyDistance()) return Visibility.VISIBLE;
-        double yaw = Math.toRadians(viewer.yaw);
-        double pitch = Math.toRadians(viewer.pitch);
-        double horizontal = Math.cos(pitch);
-        double dot = (-Math.sin(yaw) * horizontal * dx - Math.sin(pitch) * dy
-                + Math.cos(yaw) * horizontal * dz) / Math.sqrt(distanceSquared);
-        if (dot < Math.cos(Math.toRadians(config.viewAngle()))) return Visibility.HIDDEN;
+        double dot = viewerState.viewDot(viewer.yaw, viewer.pitch, dx, dy, dz) / Math.sqrt(distanceSquared);
+        if (dot < update.viewAngleCosine()) return Visibility.HIDDEN;
         if (checkSight) clearSight = player.hasLineOfSight(update.body);
         if (clearSight) return Visibility.CLEAR_SIGHT;
         return Visibility.HIDDEN;
@@ -572,9 +569,33 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         private long nextRevealOrder;
         private long revealTick;
         private int reveals;
+        private boolean hasDirection;
+        private float yaw, pitch;
+        private double directionX, sinPitch, directionZ;
 
         private Viewer(UUID playerId) {
             this.playerId = playerId;
+        }
+
+        private double viewDot(
+                float yaw,
+                float pitch,
+                double dx,
+                double dy,
+                double dz
+        ) {
+            if (!this.hasDirection || this.yaw != yaw || this.pitch != pitch) {
+                this.yaw = yaw;
+                this.pitch = pitch;
+                double yawRadians = Math.toRadians(yaw);
+                double pitchRadians = Math.toRadians(pitch);
+                double horizontal = Math.cos(pitchRadians);
+                this.directionX = -Math.sin(yawRadians) * horizontal;
+                this.sinPitch = Math.sin(pitchRadians);
+                this.directionZ = Math.cos(yawRadians) * horizontal;
+                this.hasDirection = true;
+            }
+            return this.directionX * dx - this.sinPitch * dy + this.directionZ * dz;
         }
     }
 
@@ -697,6 +718,16 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         private String teamName;
         private ItemStack[] equipment;
         private PacketPlayOutEntityEquipment[] equipmentPackets;
+        private boolean hasViewAngleCosine;
+        private double viewAngleCosine;
+
+        private double viewAngleCosine() {
+            if (!this.hasViewAngleCosine) {
+                this.viewAngleCosine = Math.cos(Math.toRadians(this.config.viewAngle()));
+                this.hasViewAngleCosine = true;
+            }
+            return this.viewAngleCosine;
+        }
 
         private Update(
                 EntityPlayer bot,
