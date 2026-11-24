@@ -24,10 +24,7 @@ public final class BotCollision {
     }
 
     public boolean blocked(Location location) {
-        AxisAlignedBB bounds = new AxisAlignedBB(
-                location.getX() - HALF_WIDTH, location.getY(), location.getZ() - HALF_WIDTH,
-                location.getX() + HALF_WIDTH, location.getY() + HEIGHT, location.getZ() + HALF_WIDTH
-        );
+        AxisAlignedBB bounds = bounds(location);
         for (int x = (int) Math.floor(bounds.a); x <= Math.floor(Math.nextDown(bounds.d)); x++) {
             for (int z = (int) Math.floor(bounds.c); z <= Math.floor(Math.nextDown(bounds.f)); z++) {
                 for (int y = (int) Math.floor(bounds.b); y <= Math.floor(Math.nextDown(bounds.e)); y++) {
@@ -38,6 +35,26 @@ public final class BotCollision {
             }
         }
         return !((CraftWorld) location.getWorld()).getHandle().a(bounds).isEmpty();
+    }
+
+    /** Moves a clear position down by at most the requested distance, stopping on block collision. */
+    public static Location descend(Location location, double distance) {
+        if (!Double.isFinite(distance) || distance < 0) {
+            throw new IllegalArgumentException("Invalid bot descent distance: " + distance);
+        }
+        AxisAlignedBB body = bounds(location);
+        double offset = -distance;
+        for (AxisAlignedBB block : ((CraftWorld) location.getWorld()).getHandle().a(body.a(0, offset, 0))) {
+            offset = block.b(body, offset);
+        }
+        return location.clone().add(0, offset, 0);
+    }
+
+    private static AxisAlignedBB bounds(Location location) {
+        return new AxisAlignedBB(
+                location.getX() - HALF_WIDTH, location.getY(), location.getZ() - HALF_WIDTH,
+                location.getX() + HALF_WIDTH, location.getY() + HEIGHT, location.getZ() + HALF_WIDTH
+        );
     }
 
     public static Location standingLocation(Location location) {
