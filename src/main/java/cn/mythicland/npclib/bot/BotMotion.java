@@ -50,13 +50,14 @@ public final class BotMotion {
             boolean chase,
             boolean returning,
             boolean near,
-            boolean balanced
+            boolean balanced,
+            double speedMultiplier
     ) {
         BotNavigator.Result result = navigator.navigate(config, location, goal, entity.getId(), tick,
                 descending, chase, returning, context);
         if (!result.aborted()) {
             move(config, entity, location, result.waypoint(), opponent, tick,
-                    descending, chase, near, result.direct(), balanced);
+                    descending, chase, near, result.direct(), balanced, speedMultiplier);
         }
     }
 
@@ -71,7 +72,8 @@ public final class BotMotion {
             boolean chase,
             boolean near,
             boolean direct,
-            boolean balanced
+            boolean balanced,
+            double speedMultiplier
     ) {
         Player player = entity.getBukkitEntity();
         Location aim = waypoint;
@@ -125,7 +127,7 @@ public final class BotMotion {
             this.nextJump = tick + random(200, 400);
             jump |= this.random.nextDouble() < config.approachJumpChance();
         }
-        entity.step((float) input.getX(), (float) input.getZ(), config.movementSpeed(), jump);
+        entity.step((float) input.getX(), (float) input.getZ(), config.movementSpeed() * speedMultiplier, jump);
     }
 
     private int random(int min, int max) {

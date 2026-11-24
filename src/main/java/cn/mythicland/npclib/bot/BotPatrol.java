@@ -3,9 +3,7 @@ package cn.mythicland.npclib.bot;
 import cn.mythicland.framework.navigation.CyclicPathCursor;
 import cn.mythicland.framework.navigation.NavigationProgress;
 import cn.mythicland.framework.navigation.PathLoadBalancer;
-import cn.mythicland.framework.task.StaggeredDeadline;
 import java.util.List;
-import java.util.function.Predicate;
 import org.bukkit.Location;
 import org.bukkit.World;
 
@@ -16,21 +14,21 @@ public final class BotPatrol {
 
     private final CyclicPathCursor cursor;
     private final NavigationProgress progress = new NavigationProgress(100, 2.25);
-    private PathLoadBalancer.Target crossing;
     private Location goal;
-    private long nextBalance;
     private boolean pathChanged;
+    private boolean rejoining;
+    private boolean crossing;
 
     public BotPatrol(CyclicPathCursor cursor) {
         this.cursor = cursor;
     }
 
-    public void reset(int target, long tick, int entityId) {
+    public void reset(int target) {
         this.cursor.reset(target);
-        this.crossing = null;
-        this.nextBalance = StaggeredDeadline.after(tick, entityId, 10);
         this.progress.reset();
         this.goal = null;
+        this.rejoining = false;
+        this.crossing = false;
     }
 
     public Location goal() {
@@ -46,13 +44,10 @@ public final class BotPatrol {
     public Location update(
             List<? extends Waypoint> waypoints,
             PathLoadBalancer balancing,
-            double interiorRatio,
             long routeSlot,
-            long tick,
-            int entityId,
-            Location location,
-            Predicate<Location> walkable
+            Location location
     ) {
+        boolean balanced = balancing != null;
         int size = waypoints.size();
         int index = this.cursor.target(size);
         if (index < 0 && size == 1 && !reached(location, waypoints.getFirst().location(location.getWorld()), .6)) {
@@ -60,69 +55,49 @@ public final class BotPatrol {
             index = 0;
         }
         if (index < 0) return null;
+        if (balanced) {
+            var recovery = balancing.recoveryGoal(routeSlot);
+            if (recovery.isPresent()) {
+                boolean crossing = balancing.isCrossing(routeSlot);
+                if (!this.rejoining || this.crossing != crossing) {
+                    this.rejoining = true;
+                    this.crossing = crossing;
+                    this.pathChanged = true;
+                    this.progress.reset();
+                }
+                PathLoadBalancer.Point point = recovery.get();
+                this.goal = new Location(location.getWorld(), point.x(), point.y(), point.z());
+                return this.goal;
+            }
+            if (this.rejoining) {
+                this.reset(balancing.nextWaypoint(location.getX(), location.getY(), location.getZ()));
+                this.pathChanged = true;
+                index = this.cursor.target(size);
+            }
+            int target = balancing.nextWaypoint(routeSlot);
+            if (target >= 0 && target != index && !reached(location, waypoints.get(target).location(location.getWorld()), .18)) {
+                this.reset(target);
+                this.pathChanged = true;
+                index = target;
+            }
+        }
         if (this.goal == null) {
             this.goal = waypoints.get(index).location(location.getWorld());
         }
-        double margin = balancing == null ? .6 : .18;
-        boolean arrived;
-        if (this.crossing == null) {
-            arrived = reached(location, this.goal, margin);
-        } else {
-            arrived = balancing.hasArrived(this.crossing, location.getX(), location.getZ(), tick, margin)
-                    && Math.abs(location.getY() - this.goal.getY()) <= .6;
-        }
-        if (arrived) {
-            finish(size, balancing, routeSlot, location, tick, true);
+        double margin = .6;
+        if (balanced) margin = .18;
+        if (reached(location, this.goal, margin)) {
+            finish(size, true);
             index = this.cursor.target(size);
-            this.goal = index < 0 ? null : waypoints.get(index).location(location.getWorld());
-        } else if (this.progress.isStuck(location.getX(), location.getY(), location.getZ())) {
-            finish(size, balancing, routeSlot, location, tick, false);
-        }
-        if (balancing != null && this.goal != null && tick >= this.nextBalance) {
-            this.nextBalance = StaggeredDeadline.after(tick, entityId, 10);
-            if (this.crossing == null) {
-                this.crossing = balancing.crossing(
-                        routeSlot, interiorRatio,
-                        point -> walkable.test(new Location(location.getWorld(), point.x(), point.y(), point.z()))
-                );
-                if (this.crossing != null) {
-                    this.progress.reset();
-                    this.pathChanged = true;
-                }
-            }
-        }
-        if (this.crossing != null) {
-            PathLoadBalancer.Point point = balancing.destination(this.crossing, location.getX(), location.getZ(), tick);
-            Location target = new Location(location.getWorld(), point.x(), point.y(), point.z());
-            if (walkable.test(target)) {
-                this.goal.setX(point.x());
-                this.goal.setY(point.y());
-                this.goal.setZ(point.z());
-            }
+            if (index >= 0) this.goal = waypoints.get(index).location(location.getWorld());
+        } else if (!balanced && this.progress.isStuck(location.getX(), location.getY(), location.getZ())) {
+            finish(size, false);
         }
         return this.goal;
     }
 
-    public void finish(
-            int size,
-            PathLoadBalancer balancing,
-            long routeSlot,
-            Location location,
-            long tick,
-            boolean reached
-    ) {
-        if (this.crossing != null) {
-            if (reached) {
-                this.cursor.reset(balancing.nextWaypoint(this.crossing));
-            } else {
-                this.cursor.advance(size);
-            }
-            balancing.finish(routeSlot, location.getX(), location.getY(), location.getZ(), tick);
-            this.crossing = null;
-            this.nextBalance = tick + 40;
-        } else if (reached || size > 1) {
-            this.cursor.advance(size);
-        }
+    public void finish(int size, boolean reached) {
+        if (reached || size > 1) this.cursor.advance(size);
         this.goal = null;
         this.progress.reset();
         this.pathChanged = true;

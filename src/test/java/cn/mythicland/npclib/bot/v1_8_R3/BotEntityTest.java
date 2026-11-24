@@ -12,6 +12,88 @@ import static org.mockito.Mockito.*;
 
 class BotEntityTest {
     @Test
+    void potionMetadataAndInvisibilityRefreshWithoutTreatingTheBotAsAWorldViewer() throws Exception {
+        DispenserRegistry.c();
+        BotEntity bot = mock(BotEntity.class, CALLS_REAL_METHODS);
+        WorldServer world = mock(WorldServer.class);
+        EntityTracker tracker = mock(EntityTracker.class);
+        DataWatcher watcher = mock(DataWatcher.class);
+        when(world.getTracker()).thenReturn(tracker);
+        doReturn(false).when(bot).isSpectator();
+        bot.world = world;
+        var dataWatcherField = Entity.class.getDeclaredField("datawatcher");
+        dataWatcherField.setAccessible(true);
+        dataWatcherField.set(bot, watcher);
+        Map<Integer, MobEffect> effects = new HashMap<>();
+        var effectsField = EntityLiving.class.getDeclaredField("effects");
+        effectsField.setAccessible(true);
+        effectsField.set(bot, effects);
+
+        bot.B();
+        verify(watcher).watch(7, 0);
+        verify(watcher).watch(8, (byte) 0);
+        verify(bot).setInvisible(false);
+
+        effects.put(MobEffectList.INVISIBILITY.id, new MobEffect(MobEffectList.INVISIBILITY.id, 100, 0, true, true));
+        clearInvocations(watcher, bot);
+        bot.B();
+        verify(watcher).watch(7, PotionBrewer.a(effects.values()));
+        verify(watcher).watch(8, (byte) 1);
+        verify(bot).setInvisible(true);
+
+        effects.remove(MobEffectList.INVISIBILITY.id);
+        effects.put(MobEffectList.FASTER_MOVEMENT.id, new MobEffect(MobEffectList.FASTER_MOVEMENT.id, 100, 0));
+        clearInvocations(watcher, bot);
+        bot.B();
+        verify(watcher).watch(7, PotionBrewer.a(effects.values()));
+        verify(watcher).watch(8, (byte) 0);
+        verify(bot).setInvisible(false);
+
+        effects.clear();
+        clearInvocations(watcher, bot);
+        bot.B();
+        verify(watcher).watch(7, 0);
+        verify(watcher).watch(8, (byte) 0);
+        verify(bot).setInvisible(false);
+
+        when(bot.isSpectator()).thenReturn(true);
+        clearInvocations(watcher, bot);
+        bot.B();
+        verify(watcher).watch(7, 0);
+        verify(watcher).watch(8, (byte) 0);
+        verify(bot).setInvisible(true);
+        verifyNoInteractions(tracker);
+    }
+
+    @Test
+    void patrolPeersKeepTheirHitboxesWithoutPushingEachOtherOffTheRoute() {
+        BotEntity first = mock(BotEntity.class, CALLS_REAL_METHODS);
+        BotEntity second = mock(BotEntity.class, CALLS_REAL_METHODS);
+        first.collidable(true);
+        second.collidable(true);
+        second.locX = .4;
+        second.locZ = .2;
+        first.collide(second);
+        assertTrue(Math.hypot(first.motX, first.motZ) > 0, "Native collisions push both participants");
+        assertTrue(Math.hypot(second.motX, second.motZ) > 0);
+
+        Object patrol = new Object();
+        first.collisionGroup(patrol);
+        second.collisionGroup(patrol);
+        first.motX = second.motX = first.motZ = second.motZ = 0;
+        first.collide(second);
+        second.collide(first);
+        assertEquals(0, Math.hypot(first.motX, first.motZ));
+        assertEquals(0, Math.hypot(second.motX, second.motZ));
+        assertTrue(first.ad(), "Patrol separation must preserve projectile hitboxes");
+        assertTrue(second.ad());
+        assertTrue(first.collidesWithEntities);
+        second.collisionGroup(null);
+        second.collide(first);
+        assertTrue(Math.hypot(first.motX, first.motZ) > 0, "Other collision groups keep native pushing");
+    }
+
+    @Test
     void retiringABotClearsHurtFramesAndArrowCollisionButAllowsAddressedMelee() {
         BotEntity entity = mock(BotEntity.class, CALLS_REAL_METHODS);
         entity.noDamageTicks = 20;

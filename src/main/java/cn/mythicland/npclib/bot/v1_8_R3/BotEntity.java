@@ -12,6 +12,7 @@ import org.bukkit.craftbukkit.v1_8_R3.entity.CraftEntity;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 
 import java.lang.reflect.Field;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -20,6 +21,7 @@ import java.util.function.BiConsumer;
 
 public class BotEntity extends EntityPlayer implements BotHandle {
     private boolean retired;
+    private Object collisionGroup;
     private static final IChatBaseComponent TAB_NAME = new ChatComponentText("");
     private static final Field WORLD_ACCESSES = field(World.class, "u");
     private static final Field PLAYER_STATISTICS = field(PlayerList.class, "o");
@@ -198,6 +200,27 @@ public class BotEntity extends EntityPlayer implements BotHandle {
     }
 
     @Override
+    protected void B() {
+        // Untracked bots have no client that needs EntityPlayer's world-wide viewer refresh.
+        if (this.isSpectator()) {
+            this.bj();
+            this.setInvisible(true);
+            return;
+        }
+        Collection<MobEffect> effects = this.getEffects();
+        if (effects.isEmpty()) {
+            this.bj();
+            this.setInvisible(false);
+            return;
+        }
+        byte ambient = 0;
+        if (PotionBrewer.b(effects)) ambient = 1;
+        this.getDataWatcher().watch(8, ambient);
+        this.getDataWatcher().watch(7, PotionBrewer.a(effects));
+        this.setInvisible(this.hasEffect(MobEffectList.INVISIBILITY.id));
+    }
+
+    @Override
     public boolean ad() {
         return !this.retired && !this.dead;
     }
@@ -212,6 +235,8 @@ public class BotEntity extends EntityPlayer implements BotHandle {
 
     @Override
     public void collide(Entity entity) {
+        if (entity instanceof BotEntity other && this.collisionGroup != null
+                && this.collisionGroup == other.collisionGroup) return;
         if (collidesWithEntities) {
             super.collide(entity);
         }
@@ -320,6 +345,11 @@ public class BotEntity extends EntityPlayer implements BotHandle {
     @Override
     public void collidable(boolean collidable) {
         this.collidesWithEntities = collidable;
+    }
+
+    @Override
+    public void collisionGroup(Object group) {
+        this.collisionGroup = group;
     }
 
     @Override

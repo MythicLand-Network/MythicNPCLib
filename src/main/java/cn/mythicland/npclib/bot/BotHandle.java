@@ -20,6 +20,9 @@ public interface BotHandle {
     boolean onGround();
     void collidable(boolean collidable);
 
+    /** Members of the same nonnull group do not physically push each other. Other collisions are unchanged. */
+    void collisionGroup(Object group);
+
     /**
      * Keep the entity addressable by late attack packets without intercepting projectiles or pushing actors.
      */

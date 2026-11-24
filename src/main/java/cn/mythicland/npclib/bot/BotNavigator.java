@@ -10,6 +10,10 @@ public final class BotNavigator {
     }
 
     public interface Context {
+        default boolean directOnly() {
+            return false;
+        }
+
         boolean allowed(Location location);
 
         void clearPath(Location start, Location goal);
@@ -74,6 +78,11 @@ public final class BotNavigator {
             }
         }
         boolean direct = !descending && directGoal != null && this.pathfinder.canWalkDirectly(location, directGoal);
+        if (!descending && goal != null && !direct && context.directOnly()) {
+            reset(tick);
+            context.recover(goal);
+            return new Result(null, false, true);
+        }
         if (!config.battle() && this.pathIndex < this.path.size()) {
             Location next = this.path.get(this.pathIndex);
             boolean invalid = invalid(location, next);

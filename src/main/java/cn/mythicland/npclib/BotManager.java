@@ -324,7 +324,7 @@ final class BotManager implements Listener, AutoCloseable {
             this.attacker = null;
             this.damageTick = 0;
             this.reactionUntil = 0;
-            this.patrol.reset(0, BotManager.this.tick, entity.getId());
+            this.patrol.reset(0);
             this.navigator = new BotNavigator(BotManager.this.pathfinder, BotManager.this.tick);
             this.motion = new BotMotion(BotManager.this.tick, ThreadLocalRandom.current());
             this.battleState = new BotBattleState(BotManager.this.tick, entity.getId());
@@ -378,14 +378,13 @@ final class BotManager implements Listener, AutoCloseable {
                 returning = decision.returning();
                 near = decision.near();
             } else {
-                goal = this.patrol.update(this.waypoints, null, 0, 0, BotManager.this.tick, this.entity.getId(),
-                        location, BotManager.this.pathfinder::isWalkable);
+                goal = this.patrol.update(this.waypoints, null, 0, location);
                 if (this.patrol.takePathChange()) {
                     this.navigator.reset(BotManager.this.tick);
                 }
             }
             this.motion.navigateAndMove(this.settings, this.navigator, this.navigationContext, this.entity,
-                    location, goal, opponent, BotManager.this.tick, false, chase, returning, near, false);
+                    location, goal, opponent, BotManager.this.tick, false, chase, returning, near, false, 1);
             if (opponent != null && BotManager.this.tick >= this.reactionUntil && valid(opponent)
                     && this.attack.attack(this.entity, opponent, BotManager.this.tick, 2.8, 30, 10, 16,
                     ThreadLocalRandom.current())) {
@@ -448,7 +447,7 @@ final class BotManager implements Listener, AutoCloseable {
                     if (!BotManager.this.pathfinder.isWalkable(goal)) return;
                     BotManager.this.visibility.destroy(Bot.this.entity);
                     Bot.this.entity.transfer(goal);
-                    Bot.this.patrol.finish(Bot.this.waypoints.size(), null, 0, goal, BotManager.this.tick, true);
+                    Bot.this.patrol.finish(Bot.this.waypoints.size(), true);
                 }
                 @Override
                 public void wanderFailed() { Bot.this.battle.clearGoal(); }
