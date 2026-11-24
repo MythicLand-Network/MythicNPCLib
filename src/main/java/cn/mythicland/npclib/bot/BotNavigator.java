@@ -64,7 +64,7 @@ public final class BotNavigator {
             this.path = List.of();
             this.pathIndex = 0;
         }
-        advance(config, location);
+        this.advance(config, location);
         if (!this.path.isEmpty() && this.pathIndex >= this.path.size()) {
             this.nextPath = tick;
         }
@@ -79,35 +79,35 @@ public final class BotNavigator {
         }
         boolean direct = !descending && directGoal != null && this.pathfinder.canWalkDirectly(location, directGoal);
         if (!descending && goal != null && !direct && context.directOnly()) {
-            reset(tick);
+            this.reset(tick);
             context.recover(goal);
             return new Result(null, false, true);
         }
         if (!config.battle() && this.pathIndex < this.path.size()) {
             Location next = this.path.get(this.pathIndex);
-            boolean invalid = invalid(location, next);
+            boolean invalid = this.invalid(location, next);
             if (invalid) {
                 if (next.getBlockY() == location.getBlockY()) {
                     context.clearPath(location, next);
                 } else {
                     context.clearBlock(next);
                 }
-                invalid = invalid(location, next);
+                invalid = this.invalid(location, next);
             }
             if (invalid) {
-                reset(tick);
+                this.reset(tick);
             }
         }
         boolean needsPath = config.battle() || this.pathIndex >= this.path.size();
         if (!descending && !direct && goal != null && needsPath && tick >= this.nextPath) {
-            this.path = find(config, location, goal, context);
+            this.path = this.find(config, location, goal, context);
             this.pathIndex = 0;
             this.nextPath = tick + 10 + Math.floorMod(entityId, 10);
             if (this.path.isEmpty()) {
                 context.clearPath(location, directGoal);
                 direct = this.pathfinder.canWalkDirectly(location, directGoal);
                 if (!direct) {
-                    this.path = find(config, location, goal, context);
+                    this.path = this.find(config, location, goal, context);
                 }
             }
             if (this.path.isEmpty() && !direct && !config.battle()) {
@@ -118,9 +118,11 @@ public final class BotNavigator {
                 context.wanderFailed();
             }
         }
-        advance(config, location);
-        Location waypoint = goal != null && this.pathIndex < this.path.size() ? this.path.get(this.pathIndex) : null;
-        return new Result(direct ? directGoal : waypoint, direct, false);
+        this.advance(config, location);
+        if (direct) return new Result(directGoal, true, false);
+        Location waypoint = null;
+        if (goal != null && this.pathIndex < this.path.size()) waypoint = this.path.get(this.pathIndex);
+        return new Result(waypoint, false, false);
     }
 
     private boolean invalid(Location location, Location next) {
@@ -130,7 +132,8 @@ public final class BotNavigator {
 
     private List<Location> find(Settings config, Location start, Location goal, Context context) {
         List<Location> found = this.pathfinder.find(config, start, goal);
-        return found.stream().anyMatch(point -> !context.allowed(point)) ? List.of() : found;
+        if (found.stream().anyMatch(point -> !context.allowed(point))) return List.of();
+        return found;
     }
 
     private void advance(Settings config, Location location) {

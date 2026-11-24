@@ -27,7 +27,9 @@ public final class BotPathfinder {
         return Math.max(1, (int) Math.ceil(Math.hypot(goal.getX() - start.getX(), goal.getZ() - start.getZ()) / 3.5));
     }
 
-    /** Validates a longer flat line using bounded checks below GridPathfinder's four-block limit. */
+    /**
+     * Validates a longer flat line using bounded checks below GridPathfinder's four-block limit.
+     */
     public boolean canWalkDirectly(Location start, Location goal, int maxSegments) {
         if (maxSegments <= 0) throw new IllegalArgumentException("maximum direct segments must be positive");
         int segments = this.directSegments(start, goal);
@@ -52,8 +54,10 @@ public final class BotPathfinder {
     }
 
     public List<Location> find(Settings config, Location start, Location goal) {
+        double arrivalHeight = .6;
+        if (config.battle()) arrivalHeight = 3;
         return this.pathfinder.find(
-                start, goal, SEARCH_BUDGET, config.battle() ? 3 : .6,
+                start, goal, SEARCH_BUDGET, arrivalHeight,
                 (fx, fy, fz, tx, ty, tz) -> {
                     if (!config.battle()) return true;
                     double dx = tx + .5 - config.x(), dz = tz + .5 - config.z();

@@ -18,14 +18,21 @@ class BotPathfinderTest {
             Location start = new Location(world, 0, 64, 0), goal = new Location(world, 14, 64, 0);
             int[] checks = {0};
             double[] previous = {0};
-            when(grid.canWalkDirectly(any(), any())).thenAnswer(call -> {
-                Location from = call.getArgument(0), to = call.getArgument(1);
-                assertTrue(from.distance(to) <= 4, "Each native direct check must remain within four blocks");
-                assertEquals(previous[0], from.getX(), .001, "Direct segments must cover the line continuously");
-                previous[0] = to.getX();
-                checks[0]++;
-                return true;
-            });
+            when(grid.canWalkDirectly(any(), any())).thenAnswer(
+                    call -> {
+                        Location from = call.getArgument(0), to = call.getArgument(1);
+                        assertTrue(from.distance(to) <= 4, "Each native direct check must remain within four blocks");
+                        assertEquals(
+                                previous[0],
+                                from.getX(),
+                                .001,
+                                "Direct segments must cover the line continuously"
+                        );
+                        previous[0] = to.getX();
+                        checks[0]++;
+                        return true;
+                    }
+            );
             assertEquals(4, pathfinder.directSegments(start, goal));
             assertFalse(pathfinder.canWalkDirectly(start, goal, 3));
             assertEquals(0, checks[0], "An insufficient budget must reject the line before any world reads");

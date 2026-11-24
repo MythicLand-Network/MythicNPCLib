@@ -58,11 +58,18 @@ public class BotEntity extends EntityPlayer implements BotHandle {
     }
 
     public static BotEntity create(Location location, BotOptions options) {
-        return create(location, new Options(options.name(), options.displayName(), options.skin(), options.walking(),
-                (bot, source) -> options.deathHandler().onDeath(bot,
-                        source.getEntity() != null && source.getEntity().getBukkitEntity() instanceof org.bukkit.entity.Player player
-                                ? player : null, source == DamageSource.OUT_OF_WORLD),
-                options.stepHandler()::accept));
+        return create(
+                location, new Options(
+                        options.name(), options.displayName(), options.skin(), options.walking(),
+                        (bot, source) -> options.deathHandler().onDeath(
+                                bot,
+                                source.getEntity() != null &&
+                                        source.getEntity().getBukkitEntity() instanceof org.bukkit.entity.Player player
+                                        ? player : null, source == DamageSource.OUT_OF_WORLD
+                        ),
+                        options.stepHandler()::accept
+                )
+        );
     }
 
     public static BotEntity create(Location location, Options options) {
@@ -101,15 +108,17 @@ public class BotEntity extends EntityPlayer implements BotHandle {
             @SuppressWarnings("unchecked")
             Map<UUID, ServerStatisticManager> cached =
                     (Map<UUID, ServerStatisticManager>) PLAYER_STATISTICS.get(players);
-            cached.computeIfAbsent(id, ignored -> new ServerStatisticManager(server, null) {
-                @Override
-                public void a() {
-                }
+            cached.computeIfAbsent(
+                    id, ignored -> new ServerStatisticManager(server, null) {
+                        @Override
+                        public void a() {
+                        }
 
-                @Override
-                public void b() {
-                }
-            });
+                        @Override
+                        public void b() {
+                        }
+                    }
+            );
         } catch (IllegalAccessException failure) {
             throw new IllegalStateException("Cannot prepare server statistics for bot " + id, failure);
         }
@@ -141,7 +150,7 @@ public class BotEntity extends EntityPlayer implements BotHandle {
     }
 
     protected final void spawn() {
-        if (!addUntracked()) {
+        if (!this.addUntracked()) {
             throw new IllegalStateException("Cannot add bot entity at " + getBukkitEntity().getLocation());
         }
         world.players.remove(this);
@@ -245,12 +254,12 @@ public class BotEntity extends EntityPlayer implements BotHandle {
     public void step(float strafe, float forward, double speed, boolean jump) {
         if (dead) return;
         S = 0.6F;
-        updateSprinting();
+        this.updateSprinting();
         AttributeInstance movement = getAttributeInstance(GenericAttributes.MOVEMENT_SPEED);
         movement.setValue(0.1D * speed * (getBukkitEntity().getWalkSpeed() / 0.2D));
         k((float) movement.getValue());
         if (jump && onGround) {
-            bF();
+            this.bF();
         }
         g(strafe, forward);
         aI = yaw;
@@ -261,19 +270,19 @@ public class BotEntity extends EntityPlayer implements BotHandle {
 
     @Override
     public void bF() {
-        updateSprinting();
+        this.updateSprinting();
         super.bF();
     }
 
     public void hit(org.bukkit.entity.Entity target) {
         bw();
         attack(((CraftEntity) target).getHandle());
-        updateSprinting();
+        this.updateSprinting();
     }
 
     private void updateSprinting() {
-        if (isSprinting() == walking) {
-            setSprinting(!walking);
+        if (isSprinting() == this.walking) {
+            setSprinting(!this.walking);
         }
     }
 
@@ -358,7 +367,7 @@ public class BotEntity extends EntityPlayer implements BotHandle {
     }
 
     public void transfer(Location location) {
-        destroy();
+        this.destroy();
         WorldServer target = ((CraftWorld) location.getWorld()).getHandle();
         spawnIn(target);
         dimension = target.worldProvider.getDimension();
@@ -366,7 +375,7 @@ public class BotEntity extends EntityPlayer implements BotHandle {
         dead = false;
         motX = motY = motZ = 0;
         setPositionRotation(location.getX(), location.getY(), location.getZ(), yaw, pitch);
-        if (!addUntracked()) throw new IllegalStateException("Cannot transfer bot entity to " + location);
+        if (!this.addUntracked()) throw new IllegalStateException("Cannot transfer bot entity to " + location);
         world.players.remove(this);
         target.getTracker().untrackEntity(this);
     }
@@ -403,22 +412,22 @@ public class BotEntity extends EntityPlayer implements BotHandle {
 
         @Override
         public void a(BlockPosition position) {
-            delegate.a(position);
+            this.delegate.a(position);
         }
 
         @Override
         public void b(BlockPosition position) {
-            delegate.b(position);
+            this.delegate.b(position);
         }
 
         @Override
         public void a(int x1, int y1, int z1, int x2, int y2, int z2) {
-            delegate.a(x1, y1, z1, x2, y2, z2);
+            this.delegate.a(x1, y1, z1, x2, y2, z2);
         }
 
         @Override
         public void a(String sound, double x, double y, double z, float volume, float pitch) {
-            delegate.a(sound, x, y, z, volume, pitch);
+            this.delegate.a(sound, x, y, z, volume, pitch);
         }
 
         @Override
@@ -431,7 +440,7 @@ public class BotEntity extends EntityPlayer implements BotHandle {
                 float volume,
                 float pitch
         ) {
-            delegate.a(player, sound, x, y, z, volume, pitch);
+            this.delegate.a(player, sound, x, y, z, volume, pitch);
         }
 
         @Override
@@ -446,38 +455,38 @@ public class BotEntity extends EntityPlayer implements BotHandle {
                 double dz,
                 int... data
         ) {
-            delegate.a(particle, longDistance, x, y, z, dx, dy, dz, data);
+            this.delegate.a(particle, longDistance, x, y, z, dx, dy, dz, data);
         }
 
         @Override
         public void a(Entity entity) {
-            if (entity == bot) return;
-            delegate.a(entity);
+            if (entity == this.bot) return;
+            this.delegate.a(entity);
         }
 
         @Override
         public void b(Entity entity) {
-            delegate.b(entity);
+            this.delegate.b(entity);
         }
 
         @Override
         public void a(String sound, BlockPosition position) {
-            delegate.a(sound, position);
+            this.delegate.a(sound, position);
         }
 
         @Override
         public void a(int effect, BlockPosition position, int data) {
-            delegate.a(effect, position, data);
+            this.delegate.a(effect, position, data);
         }
 
         @Override
         public void a(EntityHuman player, int effect, BlockPosition position, int data) {
-            delegate.a(player, effect, position, data);
+            this.delegate.a(player, effect, position, data);
         }
 
         @Override
         public void b(int breaker, BlockPosition position, int stage) {
-            delegate.b(breaker, position, stage);
+            this.delegate.b(breaker, position, stage);
         }
     }
 }

@@ -3,7 +3,9 @@ package cn.mythicland.npclib.bot;
 import cn.mythicland.framework.navigation.CyclicPathCursor;
 import cn.mythicland.framework.navigation.NavigationProgress;
 import cn.mythicland.framework.navigation.PathLoadBalancer;
+
 import java.util.List;
+
 import org.bukkit.Location;
 import org.bukkit.World;
 
@@ -75,7 +77,8 @@ public final class BotPatrol {
                 index = this.cursor.target(size);
             }
             int target = balancing.nextWaypoint(routeSlot);
-            if (target >= 0 && target != index && !reached(location, waypoints.get(target).location(location.getWorld()), .18)) {
+            if (target >= 0 && target != index &&
+                    !reached(location, waypoints.get(target).location(location.getWorld()), .18)) {
                 this.reset(target);
                 this.pathChanged = true;
                 index = target;
@@ -87,11 +90,11 @@ public final class BotPatrol {
         double margin = .6;
         if (balanced) margin = .18;
         if (reached(location, this.goal, margin)) {
-            finish(size, true);
+            this.finish(size, true);
             index = this.cursor.target(size);
             if (index >= 0) this.goal = waypoints.get(index).location(location.getWorld());
         } else if (!balanced && this.progress.isStuck(location.getX(), location.getY(), location.getZ())) {
-            finish(size, false);
+            this.finish(size, false);
         }
         return this.goal;
     }

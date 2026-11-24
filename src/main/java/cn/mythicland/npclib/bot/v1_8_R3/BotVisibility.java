@@ -35,7 +35,9 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
     private int reveals, revealCursor;
 
     public BotVisibility() {
-        this(player -> { });
+        this(
+                player -> {}
+        );
     }
 
     public BotVisibility(Consumer<Player> idleHidden) {
@@ -47,7 +49,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
     }
 
     public final boolean hasNameplate(UUID bot) {
-        return nameplates.containsKey(bot);
+        return this.nameplates.containsKey(bot);
     }
 
     public void configure(UUID bot, BotVisibilitySettings config) {
@@ -70,14 +72,14 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
     }
 
     public void activity(Collection<? extends Player> players, long tick) {
-        currentTick = tick;
-        online.clear();
+        this.currentTick = tick;
+        this.online.clear();
         this.onlineViewers.clear();
         Map<String, PacketPlayOutScoreboardTeam> removedTeams = null;
         for (Player player : players) {
             UUID id = player.getUniqueId();
-            online.add(id);
-            Viewer viewer = viewers.get(id);
+            this.online.add(id);
+            Viewer viewer = this.viewers.get(id);
             this.onlineViewers.add(viewer);
             if (viewer != null) {
                 viewer.pending.clear();
@@ -90,21 +92,21 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
                             entry.getKey(),
                             name -> new PacketPlayOutScoreboardTeam(new Scoreboard().createTeam(name), 1)
                     );
-                    send(player, packet);
+                    this.send(player, packet);
                     retired.remove();
                 }
             }
             Location location = player.getLocation();
-            Activity previous = activity.get(id);
+            Activity previous = this.activity.get(id);
             boolean moved = previous == null || !previous.location().getWorld().equals(location.getWorld())
                     || previous.location().distanceSquared(location) > 0.03 * 0.03
                     || Math.abs(angle(previous.location().getYaw() - location.getYaw())) > 0.5
                     || Math.abs(previous.location().getPitch() - location.getPitch()) > 0.5;
             if (moved) {
-                activity.put(id, new Activity(location, tick));
+                this.activity.put(id, new Activity(location, tick));
             }
         }
-        activity.keySet().retainAll(online);
+        this.activity.keySet().retainAll(this.online);
         var iterator = this.viewers.values().iterator();
         while (iterator.hasNext()) {
             Viewer viewer = iterator.next();
@@ -126,12 +128,16 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             String name,
             boolean hasEquipment
     ) {
-        update((BotEntity) bot, players, tick, opponent, combatViewers, config, name, hasEquipment);
+        this.update((BotEntity) bot, players, tick, opponent, combatViewers, config, name, hasEquipment);
     }
 
-    public void actionBot(BotHandle bot, int action) { action((BotEntity) bot, action); }
+    public void actionBot(BotHandle bot, int action) {
+        this.action((BotEntity) bot, action);
+    }
 
-    public void destroyBot(BotHandle bot) { destroy((BotEntity) bot); }
+    public void destroyBot(BotHandle bot) {
+        this.destroy((BotEntity) bot);
+    }
 
     @Override
     public void revealNearby(
@@ -174,15 +180,17 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         BotAudience audience = this.configureAudience(botId, config);
         EntityArmorStand nameplate = null;
         if (name != null) {
-            nameplate = nameplates.computeIfAbsent(bot.getUniqueID(), id -> {
-                EntityArmorStand stand = new EntityArmorStand(bot.world);
-                stand.setInvisible(true);
-                stand.setGravity(false);
-                ((ArmorStand) stand.getBukkitEntity()).setMarker(true);
-                stand.setCustomName(name);
-                stand.setCustomNameVisible(true);
-                return stand;
-            });
+            nameplate = this.nameplates.computeIfAbsent(
+                    bot.getUniqueID(), id -> {
+                        EntityArmorStand stand = new EntityArmorStand(bot.world);
+                        stand.setInvisible(true);
+                        stand.setGravity(false);
+                        ((ArmorStand) stand.getBukkitEntity()).setMarker(true);
+                        stand.setCustomName(name);
+                        stand.setCustomNameVisible(true);
+                        return stand;
+                    }
+            );
         }
         if (nameplate != null) {
             nameplate.setPosition(bot.locX, bot.locY + 1.8, bot.locZ);
@@ -233,8 +241,12 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
                 long order;
                 if (previous == null) order = viewer.nextRevealOrder++;
                 else order = previous.order();
-                viewer.pending.put(botId, new Reveal(botId, display, tick, config.maxRevealsPerTick(), distance,
-                        order, () -> update.sync(player, viewer, pending)));
+                viewer.pending.put(
+                        botId, new Reveal(
+                                botId, display, tick, config.maxRevealsPerTick(), distance,
+                                order, () -> update.sync(player, viewer, pending)
+                        )
+                );
                 continue;
             }
             if (!display.spawned) viewer.pending.remove(botId);
@@ -250,11 +262,11 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
     }
 
     public void flush(long tick) {
-        if (revealTick != tick) {
-            revealTick = tick;
-            reveals = 0;
+        if (this.revealTick != tick) {
+            this.revealTick = tick;
+            this.reveals = 0;
         }
-        List<Viewer> ordered = new ArrayList<>(viewers.values());
+        List<Viewer> ordered = new ArrayList<>(this.viewers.values());
         List<Queue<Reveal>> queues = new ArrayList<>(ordered.size());
         for (Viewer viewer : ordered) {
             if (viewer.revealTick != tick) {
@@ -269,8 +281,8 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             viewer.pending.clear();
         }
         int skipped = 0;
-        while (reveals < MAX_REVEALS_PER_TICK && skipped < ordered.size()) {
-            int index = Math.floorMod(revealCursor++, ordered.size());
+        while (this.reveals < MAX_REVEALS_PER_TICK && skipped < ordered.size()) {
+            int index = Math.floorMod(this.revealCursor++, ordered.size());
             Viewer viewer = ordered.get(index);
             Queue<Reveal> queue = queues.get(index);
             Reveal reveal = null;
@@ -284,7 +296,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             }
             reveal.send.run();
             viewer.reveals++;
-            reveals++;
+            this.reveals++;
             skipped = 0;
         }
     }
@@ -310,7 +322,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         if (!player.canSee(update.body)) return Visibility.HIDDEN;
         if (!viewer.u().getPlayerChunkMap().a(viewer, update.chunkX, update.chunkZ)) return Visibility.HIDDEN;
         if (fighting) return Visibility.VISIBLE;
-        Activity current = activity.get(player.getUniqueId());
+        Activity current = this.activity.get(player.getUniqueId());
         if (eyeY > config.maxViewerY()) return Visibility.HIDDEN;
         if (current != null && update.tick - current.tick() >= config.idleSeconds() * 20L) {
             this.onIdleHidden(player);
@@ -326,21 +338,21 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
 
     public void equipment(Player player, EntityPlayer bot) {
         for (int slot = 0; slot < 5; slot++)
-            send(player, new PacketPlayOutEntityEquipment(bot.getId(), slot, bot.getEquipment(slot)));
+            this.send(player, new PacketPlayOutEntityEquipment(bot.getId(), slot, bot.getEquipment(slot)));
     }
 
     public boolean muteCombatSounds(UUID player, UUID bot, long tick) {
         BotAudience audience = this.audiences.get(bot);
         if (audience == null) return false;
-        Activity current = activity.get(player);
+        Activity current = this.activity.get(player);
         if (current == null || tick - current.tick() < audience.config.idleSeconds() * 20) return false;
-        Viewer viewer = viewers.get(player);
+        Viewer viewer = this.viewers.get(player);
         Display display = viewer == null ? null : viewer.entities.get(bot);
         return display == null || !display.spawned;
     }
 
     public boolean isVisible(UUID player, UUID bot) {
-        Viewer viewer = viewers.get(player);
+        Viewer viewer = this.viewers.get(player);
         Display display = viewer == null ? null : viewer.entities.get(bot);
         return display != null && display.spawned;
     }
@@ -410,7 +422,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
     }
 
     public void restoreIdle(Player player, long tick, long idleTicks) {
-        activity.put(player.getUniqueId(), new Activity(player.getLocation(), tick - idleTicks));
+        this.activity.put(player.getUniqueId(), new Activity(player.getLocation(), tick - idleTicks));
     }
 
     @SuppressWarnings("ForLoopReplaceableByForEach") // Indexed access avoids iterator allocation in tick paths.
@@ -426,7 +438,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             Player player = Bukkit.getPlayer(display.viewer.playerId);
             if (player == null) continue;
             if (animation == null) animation = new PacketPlayOutAnimation(bot, action);
-            send(player, animation);
+            this.send(player, animation);
         }
     }
 
@@ -442,7 +454,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
                 this.removeDisplay(Bukkit.getPlayer(display.viewer.playerId), botId, display, packets);
             }
         }
-        nameplates.remove(botId);
+        this.nameplates.remove(botId);
     }
 
     private void hide(Player player, EntityPlayer bot, BotAudience audience, Display display) {
@@ -472,7 +484,7 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             this.send(player, packets.removeProfile());
         }
         if (display.team != null) {
-            viewer.retiredTeams.put(display.team, currentTick + 2);
+            viewer.retiredTeams.put(display.team, this.currentTick + 2);
         }
     }
 
@@ -481,21 +493,21 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
     }
 
     public void clear() {
-        for (Map.Entry<UUID, Viewer> entry : viewers.entrySet()) {
+        for (Map.Entry<UUID, Viewer> entry : this.viewers.entrySet()) {
             Player player = Bukkit.getPlayer(entry.getKey());
             if (player == null) continue;
             for (String team : entry.getValue().retiredTeams.keySet()) {
-                send(player, new PacketPlayOutScoreboardTeam(new Scoreboard().createTeam(team), 1));
+                this.send(player, new PacketPlayOutScoreboardTeam(new Scoreboard().createTeam(team), 1));
             }
         }
         this.audiences.clear();
-        viewers.clear();
+        this.viewers.clear();
         this.onlineViewers.clear();
-        activity.clear();
-        online.clear();
-        nameplates.clear();
-        revealTick = Long.MIN_VALUE;
-        reveals = revealCursor = 0;
+        this.activity.clear();
+        this.online.clear();
+        this.nameplates.clear();
+        this.revealTick = Long.MIN_VALUE;
+        this.reveals = this.revealCursor = 0;
     }
 
     private static final class BotAudience {
@@ -634,61 +646,74 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
         private boolean relativeLook;
 
         private Movement(Entity entity) {
-            entityId = entity.getId();
-            x = MathHelper.floor(entity.locX * 32.0D);
-            y = MathHelper.floor(entity.locY * 32.0D);
-            z = MathHelper.floor(entity.locZ * 32.0D);
-            yaw = (byte) (int) (entity.yaw * 256.0F / 360.0F);
-            pitch = (byte) (int) (entity.pitch * 256.0F / 360.0F);
-            onGround = entity.onGround;
+            this.entityId = entity.getId();
+            this.x = MathHelper.floor(entity.locX * 32.0D);
+            this.y = MathHelper.floor(entity.locY * 32.0D);
+            this.z = MathHelper.floor(entity.locZ * 32.0D);
+            this.yaw = (byte) (int) (entity.yaw * 256.0F / 360.0F);
+            this.pitch = (byte) (int) (entity.pitch * 256.0F / 360.0F);
+            this.onGround = entity.onGround;
         }
 
         private Packet<?> packet(Movement previous, boolean absolute) {
-            if (previous == null) return teleport();
-            long dx = (long) x - previous.x, dy = (long) y - previous.y, dz = (long) z - previous.z;
+            if (previous == null) return this.teleport();
+            long dx = (long) this.x - previous.x, dy = (long) this.y - previous.y, dz = (long) this.z - previous.z;
             boolean moved = dx != 0 || dy != 0 || dz != 0;
-            boolean turned = yaw != previous.yaw || pitch != previous.pitch;
-            if (!moved && !turned && onGround == previous.onGround) return null;
-            if (absolute || onGround != previous.onGround || dx < -128 || dx > 127
-                    || dy < -128 || dy > 127 || dz < -128 || dz > 127) return teleport();
+            boolean turned = this.yaw != previous.yaw || this.pitch != previous.pitch;
+            if (!moved && !turned && this.onGround == previous.onGround) return null;
+            if (absolute || this.onGround != previous.onGround || dx < -128 || dx > 127
+                    || dy < -128 || dy > 127 || dz < -128 || dz > 127) return this.teleport();
             if (!moved) {
-                if (look == null) {
-                    look = new PacketPlayOutEntity.PacketPlayOutEntityLook(entityId, yaw, pitch, onGround);
+                if (this.look == null) {
+                    this.look = new PacketPlayOutEntity.PacketPlayOutEntityLook(
+                            this.entityId,
+                            this.yaw,
+                            this.pitch,
+                            this.onGround
+                    );
                 }
-                return look;
+                return this.look;
             }
-            if (relative == null || relativeX != previous.x || relativeY != previous.y
-                    || relativeZ != previous.z || relativeLook != turned) {
-                relativeX = previous.x;
-                relativeY = previous.y;
-                relativeZ = previous.z;
-                relativeLook = turned;
-                relative = turned
+            if (this.relative == null || this.relativeX != previous.x || this.relativeY != previous.y
+                    || this.relativeZ != previous.z || this.relativeLook != turned) {
+                this.relativeX = previous.x;
+                this.relativeY = previous.y;
+                this.relativeZ = previous.z;
+                this.relativeLook = turned;
+                this.relative = turned
                         ? new PacketPlayOutEntity.PacketPlayOutRelEntityMoveLook(
-                        entityId,
+                        this.entityId,
                         (byte) dx,
                         (byte) dy,
                         (byte) dz,
-                        yaw,
-                        pitch,
-                        onGround
+                        this.yaw,
+                        this.pitch,
+                        this.onGround
                 )
                         : new PacketPlayOutEntity.PacketPlayOutRelEntityMove(
-                        entityId,
+                        this.entityId,
                         (byte) dx,
                         (byte) dy,
                         (byte) dz,
-                        onGround
+                        this.onGround
                 );
             }
-            return relative;
+            return this.relative;
         }
 
         private Packet<?> teleport() {
-            if (teleport == null) {
-                teleport = new PacketPlayOutEntityTeleport(entityId, x, y, z, yaw, pitch, onGround);
+            if (this.teleport == null) {
+                this.teleport = new PacketPlayOutEntityTeleport(
+                        this.entityId,
+                        this.x,
+                        this.y,
+                        this.z,
+                        this.yaw,
+                        this.pitch,
+                        this.onGround
+                );
             }
-            return teleport;
+            return this.teleport;
         }
     }
 
@@ -746,9 +771,9 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             this.tick = tick;
             this.config = config;
             this.hasEquipment = hasEquipment;
-            movement = new Movement(bot);
-            plateMovement = nameplate == null ? null : new Movement(nameplate);
-            metadata = bot.getDataWatcher().a()
+            this.movement = new Movement(bot);
+            this.plateMovement = nameplate == null ? null : new Movement(nameplate);
+            this.metadata = bot.getDataWatcher().a()
                     ? new PacketPlayOutEntityMetadata(bot.getId(), bot.getDataWatcher(), false) : null;
         }
 
@@ -757,121 +782,124 @@ public class BotVisibility implements cn.mythicland.npclib.bot.BotVisibility {
             if (!display.spawned) {
                 if (this.spawn == null) {
                     this.addProfile = new PacketPlayOutPlayerInfo(
-                            PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, bot
+                            PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, this.bot
                     );
-                    this.teamName = "b" + bot.getUniqueID().toString().replace("-", "").substring(0, 15);
+                    this.teamName = "b" + this.bot.getUniqueID().toString().replace("-", "").substring(0, 15);
                     Scoreboard scoreboard = new Scoreboard();
                     ScoreboardTeam team = scoreboard.createTeam(this.teamName);
                     team.setNameTagVisibility(ScoreboardTeamBase.EnumNameTagVisibility.NEVER);
-                    scoreboard.addPlayerToTeam(bot.getProfile().getName(), this.teamName);
+                    scoreboard.addPlayerToTeam(this.bot.getProfile().getName(), this.teamName);
                     this.createTeam = new PacketPlayOutScoreboardTeam(team, 0);
-                    this.spawn = new PacketPlayOutNamedEntitySpawn(bot);
-                    if (nameplate != null) this.spawnNameplate = new PacketPlayOutSpawnEntityLiving(nameplate);
+                    this.spawn = new PacketPlayOutNamedEntitySpawn(this.bot);
+                    if (this.nameplate != null)
+                        this.spawnNameplate = new PacketPlayOutSpawnEntityLiving(this.nameplate);
                 }
                 display.team = this.teamName;
                 viewer.retiredTeams.removeLong(display.team);
                 send(player, this.addProfile);
                 send(player, this.createTeam);
                 send(player, this.spawn);
-                if (nameplate != null) {
+                if (this.nameplate != null) {
                     send(player, this.spawnNameplate);
                 }
                 display.spawned = true;
                 display.spawnedAt = this.tick;
-                display.profileRemoveAt = tick + PROFILE_REMOVE_DELAY_TICKS;
-                display.location = movement;
-                display.nameplate = plateMovement;
-                display.lastTeleportTick = tick;
-                if (hasEquipment) {
-                    ItemStack[] snapshot = equipment();
+                display.profileRemoveAt = this.tick + PROFILE_REMOVE_DELAY_TICKS;
+                display.location = this.movement;
+                display.nameplate = this.plateMovement;
+                display.lastTeleportTick = this.tick;
+                if (this.hasEquipment) {
+                    ItemStack[] snapshot = this.equipment();
                     for (int slot = 0; slot < 5; slot++) {
                         if (snapshot[slot] != null) {
-                            send(player, equipmentPacket(slot));
+                            send(player, this.equipmentPacket(slot));
                         }
                     }
                     display.equipment = snapshot;
                     display.nextEquipmentCheck =
-                            StaggeredDeadline.after(tick, -bot.getId(), config.equipmentCheckTicks());
+                            StaggeredDeadline.after(this.tick, -this.bot.getId(), this.config.equipmentCheckTicks());
                 }
             }
-            if (display.profileRemoveAt > 0 && tick >= display.profileRemoveAt) {
+            if (display.profileRemoveAt > 0 && this.tick >= display.profileRemoveAt) {
                 if (this.removeProfile == null) {
                     this.removeProfile = new PacketPlayOutPlayerInfo(
-                            PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER, bot
+                            PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER, this.bot
                     );
                 }
                 send(player, this.removeProfile);
                 display.profileRemoveAt = 0;
             }
-            if (metadata != null && !initial) {
-                send(player, metadata);
+            if (this.metadata != null && !initial) {
+                send(player, this.metadata);
             }
-            boolean absolute = tick - display.lastTeleportTick >= MAX_RELATIVE_MOVE_TICKS;
-            Packet<?> packet = movement.packet(display.location, absolute);
+            boolean absolute = this.tick - display.lastTeleportTick >= MAX_RELATIVE_MOVE_TICKS;
+            Packet<?> packet = this.movement.packet(display.location, absolute);
             if (packet != null) {
                 send(player, packet);
                 if (packet instanceof PacketPlayOutEntityTeleport) {
-                    display.lastTeleportTick = tick;
+                    display.lastTeleportTick = this.tick;
                 }
             }
-            if (initial || display.location.yaw != movement.yaw) {
-                if (rotation == null) {
-                    rotation = new PacketPlayOutEntityHeadRotation(bot, movement.yaw);
+            if (initial || display.location.yaw != this.movement.yaw) {
+                if (this.rotation == null) {
+                    this.rotation = new PacketPlayOutEntityHeadRotation(this.bot, this.movement.yaw);
                 }
-                send(player, rotation);
+                send(player, this.rotation);
             }
             if (packet != null) {
-                display.location = movement;
+                display.location = this.movement;
             }
-            if (plateMovement != null) {
-                Packet<?> platePacket = plateMovement.packet(display.nameplate, absolute);
+            if (this.plateMovement != null) {
+                Packet<?> platePacket = this.plateMovement.packet(display.nameplate, absolute);
                 if (platePacket != null) {
                     send(player, platePacket);
-                    display.nameplate = plateMovement;
+                    display.nameplate = this.plateMovement;
                 }
             }
-            if (hasEquipment && tick >= display.nextEquipmentCheck) {
-                display.nextEquipmentCheck = StaggeredDeadline.after(tick, -bot.getId(), config.equipmentCheckTicks());
+            if (this.hasEquipment && this.tick >= display.nextEquipmentCheck) {
+                display.nextEquipmentCheck =
+                        StaggeredDeadline.after(this.tick, -this.bot.getId(), this.config.equipmentCheckTicks());
                 boolean changed = false;
                 for (int slot = 0; slot < 5; slot++) {
-                    ItemStack current = equipment == null ? bot.getEquipment(slot) : equipment[slot];
+                    ItemStack current = this.equipment == null ? this.bot.getEquipment(slot) : this.equipment[slot];
                     if (ItemStack.matches(display.equipment == null ? null : display.equipment[slot], current)) {
                         continue;
                     }
-                    send(player, equipmentPacket(slot));
+                    send(player, this.equipmentPacket(slot));
                     changed = true;
                 }
                 if (changed) {
-                    display.equipment = equipment();
+                    display.equipment = this.equipment();
                 }
             }
-            if (bot.hurtTicks > display.hurtTicks) {
-                if (hurt == null) {
-                    hurt = new PacketPlayOutEntityStatus(bot, (byte) 2);
+            if (this.bot.hurtTicks > display.hurtTicks) {
+                if (this.hurt == null) {
+                    this.hurt = new PacketPlayOutEntityStatus(this.bot, (byte) 2);
                 }
-                send(player, hurt);
+                send(player, this.hurt);
             }
-            display.hurtTicks = bot.hurtTicks;
+            display.hurtTicks = this.bot.hurtTicks;
         }
 
         private ItemStack[] equipment() {
-            if (equipment != null) return equipment;
-            equipment = new ItemStack[5];
-            for (int slot = 0; slot < equipment.length; slot++) {
-                ItemStack item = bot.getEquipment(slot);
-                equipment[slot] = item == null ? null : item.cloneItemStack();
+            if (this.equipment != null) return this.equipment;
+            this.equipment = new ItemStack[5];
+            for (int slot = 0; slot < this.equipment.length; slot++) {
+                ItemStack item = this.bot.getEquipment(slot);
+                this.equipment[slot] = item == null ? null : item.cloneItemStack();
             }
-            return equipment;
+            return this.equipment;
         }
 
         private PacketPlayOutEntityEquipment equipmentPacket(int slot) {
-            if (equipmentPackets == null) {
-                equipmentPackets = new PacketPlayOutEntityEquipment[5];
+            if (this.equipmentPackets == null) {
+                this.equipmentPackets = new PacketPlayOutEntityEquipment[5];
             }
-            if (equipmentPackets[slot] == null) {
-                equipmentPackets[slot] = new PacketPlayOutEntityEquipment(bot.getId(), slot, equipment()[slot]);
+            if (this.equipmentPackets[slot] == null) {
+                this.equipmentPackets[slot] =
+                        new PacketPlayOutEntityEquipment(this.bot.getId(), slot, this.equipment()[slot]);
             }
-            return equipmentPackets[slot];
+            return this.equipmentPackets[slot];
         }
     }
 }
