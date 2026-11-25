@@ -84,7 +84,8 @@ public class NPC_v1_8_R3 extends NPCBase {
 
         if (this.villagerProfession != null) {
             this.packetPlayOutVillagerSpawn = this.createVillagerSpawnPacket();
-            this.packetPlayOutEntityHeadRotation = new PacketPlayOutEntityHeadRotationWrapper().create(location, entityId);
+            this.packetPlayOutEntityHeadRotation =
+                    new PacketPlayOutEntityHeadRotationWrapper().create(location, entityId);
             this.packetPlayOutEntityDestroy = new PacketPlayOutEntityDestroy(entityId);
             return;
         }
@@ -171,7 +172,8 @@ public class NPC_v1_8_R3 extends NPCBase {
         if (this.villagerProfession != null) {
             this.packetPlayOutVillagerSpawn = this.createVillagerSpawnPacket();
         } else {
-            this.packetPlayOutNamedEntitySpawn = new PacketPlayOutNamedEntitySpawnWrapper().create(uuid, location, entityId);
+            this.packetPlayOutNamedEntitySpawn =
+                    new PacketPlayOutNamedEntitySpawnWrapper().create(uuid, location, entityId);
         }
         this.packetPlayOutEntityHeadRotation = new PacketPlayOutEntityHeadRotationWrapper().create(location, entityId);
         PacketPlayOutEntityTeleport packet = new PacketPlayOutEntityTeleport(
@@ -314,7 +316,8 @@ public class NPC_v1_8_R3 extends NPCBase {
         EntityVillager villager = new EntityVillager(((CraftWorld) location.getWorld()).getHandle());
         villager.d(entityId);
         villager.setProfession(this.villagerProfession.getId());
-        villager.setPositionRotation(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+        villager.setPositionRotation(location.getX(), location.getY(), location.getZ(), location.getYaw(),
+                location.getPitch());
         villager.aK = location.getYaw();
         return new PacketPlayOutSpawnEntityLiving(villager);
     }
@@ -335,28 +338,26 @@ public class NPC_v1_8_R3 extends NPCBase {
 
     @Override
     public void sendHeadRotationPackets(Location location) {
-        for (Player player : Bukkit.getOnlinePlayers()) {
+        Location npcLocation = this.getLocation();
+        Vector direction = location.toVector().subtract(npcLocation.toVector());
+        npcLocation.setDirection(direction);
+        float yaw = npcLocation.getYaw();
+        float pitch = npcLocation.getPitch();
+        PacketPlayOutEntity look = new PacketPlayOutEntity.PacketPlayOutEntityLook(
+                this.getEntityId(),
+                (byte) ((yaw % 360.0D) * 256 / 360),
+                (byte) ((pitch % 360.0D) * 256 / 360),
+                false
+        );
+        PacketPlayOutEntityHeadRotation head =
+                new PacketPlayOutEntityHeadRotationWrapper().create(npcLocation, this.entityId);
+        for (UUID viewerId : this.getShown()) {
+            Player player = Bukkit.getPlayer(viewerId);
+            if (player == null || !player.isOnline() || !this.isShown(player)) continue;
+            if (!npcLocation.getWorld().equals(player.getWorld())) continue;
             PlayerConnection connection = ((CraftPlayer) player).getHandle().playerConnection;
-
-            Location npcLocation = getLocation();
-            Vector dirBetweenLocations = location.toVector().subtract(npcLocation.toVector());
-
-            npcLocation.setDirection(dirBetweenLocations);
-
-            float yaw = npcLocation.getYaw();
-            float pitch = npcLocation.getPitch();
-
-            connection.sendPacket(
-                    new PacketPlayOutEntity.PacketPlayOutEntityLook(
-                            getEntityId(),
-                            (byte) ((yaw % 360.) * 256 / 360),
-                            (byte) ((pitch % 360.) * 256 / 360),
-                            false
-                    )
-            );
-            connection.sendPacket(
-                    new PacketPlayOutEntityHeadRotationWrapper().create(npcLocation, entityId)
-            );
+            connection.sendPacket(look);
+            connection.sendPacket(head);
         }
     }
 }
