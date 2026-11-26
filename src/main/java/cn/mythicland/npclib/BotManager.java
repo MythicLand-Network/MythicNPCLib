@@ -431,8 +431,9 @@ final class BotManager implements Listener, AutoCloseable {
                 returning = decision.returning();
                 near = decision.near();
             } else {
-                goal = this.patrol.update(this.waypoints, null, 0, location);
+                goal = this.patrol.update(this.waypoints, false, location);
                 if (this.patrol.takePathChange()) {
+                    this.entity.stopHorizontalMovement();
                     this.navigator.reset(BotManager.this.tick);
                 }
             }

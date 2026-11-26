@@ -1,19 +1,16 @@
 package cn.mythicland.npclib.bot;
 
 import org.bukkit.Location;
-import org.bukkit.util.Vector;
 
 import java.util.List;
 
 public final class BotNavigator {
+    private static final double PATH_SHORTCUT_RANGE_SQUARED = 24 * 24;
+
     public interface Settings extends BotMovement.Settings, BotPathfinder.Settings {
     }
 
     public interface Context {
-        default boolean directOnly() {
-            return false;
-        }
-
         boolean allowed(Location location);
 
         void clearPath(Location start, Location goal);
@@ -70,22 +67,18 @@ public final class BotNavigator {
         }
         Location directGoal = goal;
         if (goal != null) {
-            Vector offset = goal.toVector()
-                    .subtract(location.toVector())
-                    .setY(0);
-            if (offset.lengthSquared() > 4) {
-                directGoal = location.clone().add(offset.normalize().multiply(2));
+            double dx = goal.getX() - location.getX(), dz = goal.getZ() - location.getZ();
+            double distanceSquared = dx * dx + dz * dz;
+            if (distanceSquared > 4) {
+                double distance = Math.sqrt(distanceSquared);
+                directGoal = location.clone().add(dx / distance * 2, 0, dz / distance * 2);
             }
         }
         boolean direct = !descending && directGoal != null && this.pathfinder.canWalkDirectly(location, directGoal);
-        if (!descending && goal != null && !direct && context.directOnly()) {
-            this.reset(tick);
-            context.recover(goal);
-            return new Result(null, false, true);
-        }
         if (!config.battle() && this.pathIndex < this.path.size()) {
+            boolean validated = !descending && !direct && this.shortcut(location);
             Location next = this.path.get(this.pathIndex);
-            boolean invalid = this.invalid(location, next);
+            boolean invalid = !validated && this.invalid(location, next);
             if (invalid) {
                 if (next.getBlockY() == location.getBlockY()) {
                     context.clearPath(location, next);
@@ -117,6 +110,7 @@ public final class BotNavigator {
             if (this.path.isEmpty() && !direct && !chase && !returning) {
                 context.wanderFailed();
             }
+            if (!config.battle() && !direct) this.shortcut(location);
         }
         this.advance(config, location);
         if (direct) return new Result(directGoal, true, false);
@@ -127,7 +121,20 @@ public final class BotNavigator {
 
     private boolean invalid(Location location, Location next) {
         return !this.pathfinder.isWalkable(next)
-                || next.getBlockY() == location.getBlockY() && !this.pathfinder.canWalkDirectly(location, next);
+                || next.getBlockY() == location.getBlockY() && !this.canReach(location, next);
+    }
+
+    private boolean shortcut(Location location) {
+        int index = this.pathfinder.furthestDirectPoint(location, this.path, this.pathIndex, PATH_SHORTCUT_RANGE_SQUARED);
+        if (index < this.pathIndex) return false;
+        this.pathIndex = index;
+        return true;
+    }
+
+    private boolean canReach(Location location, Location point) {
+        if (location.distanceSquared(point) > PATH_SHORTCUT_RANGE_SQUARED) return false;
+        int segments = this.pathfinder.directSegments(location, point);
+        return this.pathfinder.canWalkDirectly(location, point, segments);
     }
 
     private List<Location> find(Settings config, Location start, Location goal, Context context) {

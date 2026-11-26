@@ -49,6 +49,8 @@ public interface BotHandle {
 
     void step(float strafe, float forward, double speed, boolean jump);
 
+    void stopHorizontalMovement();
+
     void hit(org.bukkit.entity.Entity opponent);
 
     void transfer(Location location);

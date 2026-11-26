@@ -149,6 +149,11 @@ public class BotEntity extends EntityPlayer implements BotHandle {
         return true;
     }
 
+    // PandaSpigot calls this hook to omit subscriptions for the bot's no-op connection.
+    public final boolean isClientlessPlayer() {
+        return true;
+    }
+
     protected final void spawn() {
         if (!this.addUntracked()) {
             throw new IllegalStateException("Cannot add bot entity at " + getBukkitEntity().getLocation());
@@ -266,6 +271,12 @@ public class BotEntity extends EntityPlayer implements BotHandle {
         aK = yaw;
         f(yaw);
         world.players.remove(this);
+    }
+
+    @Override
+    public void stopHorizontalMovement() {
+        this.motX = 0;
+        this.motZ = 0;
     }
 
     @Override
